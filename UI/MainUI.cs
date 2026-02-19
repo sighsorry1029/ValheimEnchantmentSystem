@@ -1,4 +1,5 @@
-﻿using BepInEx.Bootstrap;
+using BepInEx.Bootstrap;
+using BepInEx.Configuration;
 using ItemDataManager;
 using ItemManager;
 using JetBrains.Annotations;
@@ -68,14 +69,17 @@ public static class VES_UI
     private static float TIMER_MAX;
     
 
-    public static ConfigEntry<Duration> _enchantmentAnimationDuration;
-    public enum Duration { _1 = 1, _3 = 3, _6 = 6 }
+    public static ConfigEntry<int> _enchantmentAnimationDuration;
     
     [UsedImplicitly]
     private static void OnInit()
     {
         if (ValheimEnchantmentSystem.NoGraphics) return;
-        _enchantmentAnimationDuration = ValheimEnchantmentSystem._thistype.Config.Bind("Visuals", "EnchantmentAnimationDuration", Duration._3, "Duration of the enchantment animation.");
+        _enchantmentAnimationDuration = ValheimEnchantmentSystem._thistype.Config.Bind(
+            "Client",
+            "Visuals - EnchantmentAnimationDuration",
+            1,
+            new ConfigDescription("Duration of the enchantment animation (1-5 seconds).", new AcceptableValueRange<int>(1, 5)));
         _1sec = ValheimEnchantmentSystem._asset.LoadAsset<AudioClip>("kg_EnchantmentSound_Main_1");
         _3sec = ValheimEnchantmentSystem._asset.LoadAsset<AudioClip>("kg_EnchantmentSound_Main_3");
         _6sec = ValheimEnchantmentSystem._asset.LoadAsset<AudioClip>("kg_EnchantmentSound_Main_6");
@@ -88,8 +92,6 @@ public static class VES_UI
         UI.SetActive(false);
         UnityEngine.Object.DontDestroyOnLoad(UI);
 
-        UI.transform.Find("Canvas/Header/Text").GetComponent<Text>().text = "$enchantment_header".Localize();
-        
         Item_Transform = UI.transform.Find("Canvas/Background/Item");
         Item_Text = Item_Transform.Find("Text").GetComponent<Text>();
         Item_Icon = Item_Transform.Find("Icon").GetComponent<Image>();
@@ -105,7 +107,6 @@ public static class VES_UI
 
         UseBless_Transform = UI.transform.Find("Canvas/Background/UseBless");
         UseBless_Icon = UseBless_Transform.Find("Icon").GetComponent<Image>();
-        UseBless_Transform.Find("Text").GetComponent<Text>().text = "$enchantment_usebless".Localize();
         UseBless_Transform.Find("Text").GetComponent<Text>().color = Color.yellow;
 
         Start_Transform = UI.transform.Find("Canvas/Background/Start");
@@ -183,7 +184,8 @@ public static class VES_UI
 
 
             _enchantProcessing = true;
-            TIMER_MAX = (int)_enchantmentAnimationDuration.Value;
+            int animationDuration = Mathf.Clamp(_enchantmentAnimationDuration.Value, 1, 5);
+            TIMER_MAX = animationDuration;
             _enchantTimer = TIMER_MAX;
             Start_Text.text = "$enchantment_cancel".Localize();
 
@@ -205,13 +207,7 @@ public static class VES_UI
             Scroll_Text.text = "";
             
             AUsrc.Stop();
-            AUsrc.clip = _enchantmentAnimationDuration.Value switch
-            {
-                Duration._1 => _1sec,
-                Duration._3 => _3sec,
-                Duration._6 => _6sec,
-                _ => _3sec
-            };
+            AUsrc.clip = animationDuration <= 1 ? _1sec : animationDuration <= 3 ? _3sec : _6sec;
             AUsrc.Play();
         }
     }
@@ -504,27 +500,21 @@ public static class VES_UI
 
     private static string SetChanceLabel(Enchantment_Core.Enchanted en, string itemName)
     {
-        if (en)
+        int level = en ? en.level : 0;
+        string color = SyncedData.GetColor(_currentItem.m_dropPrefab?.name, level, out _, true).IncreaseColorLight();
+        Color cColor = color.ToColorAlpha();
+        itemName += $" (<color={color}>+{level}</color>)";
+        Item_Trail.color = cColor;
+        if (level == 0) Item_Trail.color = new Color(1f, 1f, 1f, 0.8f);
+
+        double chance = (SyncedData.GetEnchantmentChance(_currentItem.m_dropPrefab?.name, level, _currentItem.IsWeapon()).success + SyncedData.GetAdditionalEnchantmentChance()).RoundOne();
+        if (!SyncedData.BlessedScrollsPreventBreak.Value && _useBless)
         {
-            string c = SyncedData.GetColor(en, out _, true).IncreaseColorLight();
-            Color cColor = c.ToColorAlpha();
-            itemName += $" (<color={c.IncreaseColorLight()}>+{en.level}</color>)";
-            Item_Trail.color = cColor;
-            double chance = (en.GetEnchantmentChance() + SyncedData.GetAdditionalEnchantmentChance()).RoundOne();
-            if (!SyncedData.BlessedScrollsPreventBreak.Value && _useBless)
-            {
-                Int32.TryParse(SyncedData.BlessedScrollsAdditionalChance.Value.ToString(), out int addedChance);
-                chance += addedChance;
-            }
-            if (chance > 100) chance = 100;
-            Chance_Text.text = $"{chance}%";
+            Int32.TryParse(SyncedData.BlessedScrollsAdditionalChance.Value.ToString(), out int addedChance);
+            chance += addedChance;
         }
-        else
-        {
-            itemName += " (<color=#FFFFFF>+0</color>)";
-            Item_Trail.color = new Color(1f, 1f, 1f, 0.8f);
-            Chance_Text.text = "100%";
-        }
+        if (chance > 100) chance = 100;
+        Chance_Text.text = $"{chance}%";
 
         return itemName;
     }
@@ -534,6 +524,14 @@ public static class VES_UI
         Default();
         if (!InventoryGui.IsVisible())
             InventoryGui.instance.Show(null);
+
+        // Localize UI when showing (in case it wasn't ready during OnInit)
+        if (Localization.instance != null)
+        {
+            UI.transform.Find("Canvas/Header/Text").GetComponent<Text>().text = "$enchantment_header".Localize();
+            UseBless_Transform.Find("Text").GetComponent<Text>().text = "$enchantment_usebless".Localize();
+        }
+
         UI.SetActive(true);
     }
 
@@ -628,7 +626,6 @@ public static class VES_UI
                 else Show();
                 PlayClick();
             });
-            _enchantmentButton.GetComponent<UITooltip>().m_text = "$enchantment_menu".Localize();
             RectTransform rect = _enchantmentButton.GetComponent<RectTransform>();
             rect.anchoredPosition += new Vector2(0, 74);
             _enchantmentButton.transform.Find("Glow")?.gameObject.SetActive(false);
@@ -646,6 +643,12 @@ public static class VES_UI
         private static void Postfix(InventoryGui __instance)
         {
             if (!Player.m_localPlayer) return;
+
+            // Localize tooltip when inventory is shown
+            if (Localization.instance != null && InventoryGui_Awake_Patch._enchantmentButton != null)
+            {
+                InventoryGui_Awake_Patch._enchantmentButton.GetComponent<UITooltip>().m_text = "$enchantment_menu".Localize();
+            }
 
             InventoryGui_Awake_Patch._enchantmentBackground.gameObject.SetActive(true);
             InventoryGui_Awake_Patch._enchantmentButton.gameObject.SetActive(true);

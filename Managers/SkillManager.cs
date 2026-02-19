@@ -1,6 +1,14 @@
-﻿using System.Text.RegularExpressions;
+﻿using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Reflection;
+using System.Text.RegularExpressions;
+using BepInEx;
+using BepInEx.Configuration;
+using HarmonyLib;
 using JetBrains.Annotations;
-using kg.ValheimEnchantmentSystem;
+using UnityEngine;
 
 namespace SkillManager;
 
@@ -73,17 +81,17 @@ public class Skill
 			m_description = "$skilldesc_" + sanitizedName,
 			m_icon = icon,
 			m_increseStep = 1f,
-			m_skill = skill
+			m_skill = skill,
 		};
 		internalSkillName = sanitizedName;
 		skillName = englishName;
 
-		Name = new LocalizeKey("skill_" + skill);
+		Name = new LocalizeKey("skill_" + skill).English(englishName);
 		Description = new LocalizeKey("skilldesc_" + sanitizedName);
 	}
 
 	public static Skills.SkillType fromName(string englishName) => (Skills.SkillType)Math.Abs(englishName.GetStableHashCode());
- 
+
 	public static class LocalizationCache
 	{
 		private static readonly Dictionary<string, Localization> localizations = new();
@@ -123,7 +131,11 @@ public class Skill
 		public readonly string Key;
 		public readonly Dictionary<string, string> Localizations = new();
 
-		public LocalizeKey(string key) => Key = key.Replace("$", "");
+		public LocalizeKey(string key)
+		{
+			Key = key.Replace("$", "");
+			keys.Add(this);
+		}
 
 		public void Alias(string alias)
 		{
@@ -133,7 +145,10 @@ public class Skill
 				alias = $"${alias}";
 			}
 			Localizations["alias"] = alias;
-			Localization.instance.AddWord(Key, Localization.instance.Localize(alias));
+			if (Localization.m_instance != null)
+			{
+				Localization.instance.AddWord(Key, Localization.instance.Localize(alias));
+			}
 		}
 
 		public LocalizeKey English(string key) => addForLang("English", key);
@@ -174,14 +189,18 @@ public class Skill
 		private LocalizeKey addForLang(string lang, string value)
 		{
 			Localizations[lang] = value;
-			if (Localization.instance.GetSelectedLanguage() == lang)
+			if (Localization.m_instance != null)
 			{
-				Localization.instance.AddWord(Key, value);
+				if (Localization.instance.GetSelectedLanguage() == lang)
+				{
+					Localization.instance.AddWord(Key, value);
+				}
+				else if (lang == "English" && !Localization.instance.m_translations.ContainsKey(Key))
+				{
+					Localization.instance.AddWord(Key, value);
+				}
 			}
-			else if (lang == "English" && !Localization.instance.m_translations.ContainsKey(Key))
-			{
-				Localization.instance.AddWord(Key, value);
-			}
+
 			return this;
 		}
 
@@ -196,7 +215,7 @@ public class Skill
 				}
 				else if (key.Localizations.TryGetValue("alias", out string alias))
 				{
-					Localization.instance.AddWord(key.Key, Localization.instance.Localize(alias));
+					__instance.AddWord(key.Key, Localization.instance.Localize(alias));
 				}
 			}
 		}
@@ -368,7 +387,7 @@ public class Skill
 
 			if (skills.ContainsKey(type))
 			{
-				__result = true; 
+				__result = true;
 			}
 		}
 	}
@@ -399,31 +418,11 @@ public class Skill
 	private static bool hasConfigSync = true;
 	private static object? _configSync;
 
-	private static object? configSync
-	{
-		get
-		{
-			if (_configSync == null && hasConfigSync)
-			{
-				if (Assembly.GetExecutingAssembly().GetType("ServerSync.ConfigSync") is { } configSyncType)
-				{
-					_configSync = Activator.CreateInstance(configSyncType, plugin.Info.Metadata.GUID + " SkillManager");
-					configSyncType.GetField("CurrentVersion").SetValue(_configSync, plugin.Info.Metadata.Version.ToString());
-					configSyncType.GetProperty("IsLocked")!.SetValue(_configSync, true);
-				}
-				else
-				{
-					hasConfigSync = false;
-				}
-			}
-
-			return _configSync;
-		}
-	}
+    private static object? configSync => kg.ValheimEnchantmentSystem.ValheimEnchantmentSystem.ConfigSync;
 
 	private static ConfigEntry<T> config<T>(string group, string name, T value, ConfigDescription description)
 	{
-		ConfigEntry<T> configEntry = ValheimEnchantmentSystem.SyncedConfig.Bind(group, name, value, description);
+		ConfigEntry<T> configEntry = plugin.Config.Bind(group, name, value, description);
 
 		configSync?.GetType().GetMethod("AddConfigEntry")!.MakeGenericMethod(typeof(T)).Invoke(configSync, new object[] { configEntry });
 
@@ -431,6 +430,11 @@ public class Skill
 	}
 
 	private static ConfigEntry<T> config<T>(string group, string name, T value, string description) => config(group, name, value, new ConfigDescription(description));
+}
+
+public static class SkillManagerVersion
+{
+	public const string Version = "1.7.0";
 }
 
 [PublicAPI]

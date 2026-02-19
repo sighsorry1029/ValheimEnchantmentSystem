@@ -11,6 +11,7 @@ namespace kg.ValheimEnchantmentSystem.Items_Structures;
 public static class ScrollItems
 {
     private static GameObject CombineOutline;
+    private static GameObject PrefabRoot;
     
     private static ConfigEntry<float> DropChance;
     private static ConfigEntry<float> DropChance_Bosses;
@@ -21,6 +22,8 @@ public static class ScrollItems
     
     private static ConfigEntry<bool> MonsterDroppingScrolls;
     private static ConfigEntry<bool> MonsterDroppingSkilllScrolls;
+
+    private static ConfigEntry<int> BlessedConvertRequirement;
 
     private static ConfigEntry<string> ExcludePrefabsFromDrop;
     
@@ -35,37 +38,82 @@ public static class ScrollItems
 
     private static readonly Dictionary<char, int> SkillExpScroll_DefaultValues = new()
     {
-        {'F', 15}, { 'D', 25 }, { 'C', 50 }, { 'B', 75 }, { 'A', 100 }, { 'S', 140 }
+        {'F', 15}, { 'E', 25 }, { 'D', 50 }, { 'C', 75 }, { 'B', 100 }, { 'A', 140 }, { 'S', 200 }
     };
     
     private static readonly HashSet<string> UpgradeScrollHashset = new();
 
     private static readonly HashSet<string> ExludedDroPrefabs = new();
+    private static readonly Dictionary<string, GameObject> NameToPrefab = new();
 
-    private static readonly Dictionary<char, string[]> DefaultRecipes = new()
+    private struct RecipeData
     {
-        { 'F', new[]{"DeerHide,10", "Flint,5", "Wood,5", "TrophyDeer,2"}},
-        { 'D', new[]{"GreydwarfEye,10", "BoneFragments,5", "FineWood,5", "TrophySkeleton,2"}},
-        { 'C', new[]{"Entrails,10", "Bloodbag,5", "ElderBark,5", "TrophyLeech,2"}},
-        { 'B', new[]{"WolfPelt,10", "FreezeGland,5", "FineWood,5", "TrophyHatchling,2"}},
-        { 'A', new[]{"LoxPelt,10", "Needle,5", "FineWood,5", "TrophyGoblin,2"}},
-        { 'S', new[]{"Eitr,10", "Softtissue,5", "YggdrasilWood,5", "TrophyDvergr,2"}},
+        public int amount;
+        public string[] reqs;
+        public RecipeData(int amount, params string[] reqs)
+        {
+            this.amount = amount;
+            this.reqs = reqs;
+        }
+    }
+
+    private static readonly Dictionary<char, RecipeData> DefaultRecipes_Weapon = new()
+    {
+        { 'F', new RecipeData(6, "TrophyNeck,1", "Dandelion,6", "Wood,24", "Stone,12")},
+        { 'E', new RecipeData(3, "TrophyDraugr,1", "Entrails,3", "ElderBark,12", "Guck,6")},
+        { 'D', new RecipeData(3, "TrophyWolf,1", "WolfPelt,3", "Crystal,6", "Obsidian,9")},
+        { 'C', new RecipeData(6, "TrophyDeathsquito,1", "Needle,6", "FineWood,24", "Tar,12")},
+        { 'B', new RecipeData(6, "TrophySeeker,1", "Carapace,12", "YggdrasilWood,18", "BlackMarble,24")},
+        { 'A', new RecipeData(3, "TrophyVolture,1", "ProustitePowder,6", "Blackwood,12", "Grausten,24")},
+        { 'S', new RecipeData(1, "TrophyFader,1")},
     };
-    private static readonly Dictionary<char, string[]> DefaultRecipes_Blessed = new()
+    private static readonly Dictionary<char, RecipeData> DefaultRecipes_Weapon_Blessed = new()
     {
-        { 'F', new[]{"HardAntler,1","SurtlingCore,1", "GreydwarfEye,20"}},
-        { 'D', new[]{"TrophyTheElder,1", "AncientSeed,2", "SilverNecklace,1"}},
-        { 'C', new[]{"TrophyBonemass,1", "Chitin,5", "BoneFragments,10"}},
-        { 'B', new[]{"TrophySGolem,1", "WolfFang,2", "Crystal,20", "WolfHairBundle,3"}},
-        { 'A', new[]{"TrophyGoblinShaman,1", "GoblinTotem,2", "Needle,20", "LoxPelt,3"}},
-        { 'S', new[]{"TrophySeekerBrute,1", "Eitr,5", "RoyalJelly,25", "Carapace,40"}},
+        { 'F', new RecipeData(2, "TrophyBjorn,1", "BjornPaw,4", "BoneFragments,12", "Bronze,8")},
+        { 'E', new RecipeData(2, "TrophyDraugrElite,1", "Bloodbag,4", "Chain,2", "Iron,8")},
+        { 'D', new RecipeData(4, "TrophyFenring,1", "WolfFang,8", "JuteRed,4", "Silver,16")},
+        { 'C', new RecipeData(4, "TrophyBjornUndead,1", "UndeadBjornRibcage,8", "LinenThread,24", "BlackMetal,16")},
+        { 'B', new RecipeData(1, "TrophyGjall,1", "Bilebag,2", "BlackCore,1", "Eitr,4")},
+        { 'A', new RecipeData(4, "TrophyFallenValkyrie,1", "CelestialFeather,12", "BonemawSerpentTooth,6", "FlametalNew,16")},
+        { 'S', new RecipeData(1, "TrophyFader,1")},
+    };
+    private static readonly Dictionary<char, RecipeData> DefaultRecipes_Armor = new()
+    {
+        { 'F', new RecipeData(2, "TrophyBoar,1", "LeatherScraps,2", "Resin,6", "Flint,4")},
+        { 'E', new RecipeData(3, "TrophyBlob,1", "Ooze,6", "ElderBark,12", "Guck,6")},
+        { 'D', new RecipeData(3, "TrophyHatchling,1", "FreezeGland,3", "Crystal,6", "Obsidian,9")},
+        { 'C', new RecipeData(3, "TrophyGoblin,1", "Coins,30", "FineWood,12", "Tar,6")},
+        { 'B', new RecipeData(6, "TrophyTick,1", "GiantBloodSack,6", "YggdrasilWood,18", "BlackMarble,24")},
+        { 'A', new RecipeData(3, "TrophyAsksvin,1", "Pickable_SulfurRock,3", "Blackwood,12", "Grausten,24")},
+        { 'S', new RecipeData(1, "TrophyFader,1")},
+    };
+    private static readonly Dictionary<char, RecipeData> DefaultRecipes_Armor_Blessed = new()
+    {
+        { 'F', new RecipeData(1, "TrophyFrostTroll,1", "TrollHide,5", "Ectoplasm,1", "Bronze,4")},
+        { 'E', new RecipeData(1, "TrophyAbomination,1", "Root,5", "Chitin,2", "Iron,4")},
+        { 'D', new RecipeData(4, "TrophySGolem,1", "WolfClaw,2", "WolfHairBundle,8", "Silver,16")},
+        { 'C', new RecipeData(2, "TrophyLox,1", "LoxPelt,6", "BarleyFlour,12", "BlackMetal,8")},
+        { 'B', new RecipeData(4, "TrophySeekerBrute,1", "Mandible,4", "JuteBlue,6", "Eitr,16")},
+        { 'A', new RecipeData(4, "TrophyMorgen,1", "MorgenHeart,4", "CharredBone,24", "FlametalNew,16")},
+        { 'S', new RecipeData(1, "TrophyFader,1")},
+    };
+
+    private static readonly Dictionary<char, int> DefaultCraftAmount_Convert = new()
+    {
+        { 'F', 1 }, { 'E', 1 }, { 'D', 1 }, { 'C', 1 }, { 'B', 1 }, { 'A', 1 }, { 'S', 1 }
     };
     
-    private static void FillRecipe(Item item, char tier, bool bless)
+    private static void FillRecipe(Item item, char tier, bool bless, bool isArmor)
     {
-        Dictionary<char, string[]> targetDic = bless ? DefaultRecipes_Blessed : DefaultRecipes;
-        string[] recipe = targetDic[tier];
-        foreach (string s in recipe)
+        Dictionary<char, RecipeData> targetDic;
+        if (isArmor)
+            targetDic = bless ? DefaultRecipes_Armor_Blessed : DefaultRecipes_Armor;
+        else
+            targetDic = bless ? DefaultRecipes_Weapon_Blessed : DefaultRecipes_Weapon;
+        
+        RecipeData recipe = targetDic[tier];
+        item.CraftAmount = recipe.amount;
+        foreach (string s in recipe.reqs)
         {
             string[] split = s.Split(',');
             string name = split[0];
@@ -82,62 +130,104 @@ public static class ScrollItems
         CombineOutline = ValheimEnchantmentSystem._asset.LoadAsset<GameObject>("Enchantment_CombinePart");
         MonsterDroppingScrolls = ValheimEnchantmentSystem.config("Scrolls", "Drop From Monsters", true, "Allow monsters to drop scrolls.");
         MonsterDroppingSkilllScrolls = ValheimEnchantmentSystem.config("Skill Scrolls", "Drop From Monsters (Skill exp)", true, "Allow monsters to drop enchant skill exp scrolls.");
-        DropChance = ValheimEnchantmentSystem.config("Scrolls", "Drop Chance", 8f, "Chance to drop from enemies.");
+        DropChance = ValheimEnchantmentSystem.config("Scrolls", "Drop Chance", 7f, "Chance to drop from enemies.");
         DropChance_Bosses = ValheimEnchantmentSystem.config("Scrolls", "Drop Chance (Bosses)", 100f, "Chance to drop from bosses.");
-        DropChance_Blessed = ValheimEnchantmentSystem.config("Scrolls", "Blessed Drop Chance", 0.25f, "Chance to drop from enemies.");
+        DropChance_Blessed = ValheimEnchantmentSystem.config("Scrolls", "Blessed Drop Chance", 0.5f, "Chance to drop from enemies.");
         DropChance_Blessed_Bosses = ValheimEnchantmentSystem.config("Scrolls", "Blessed Drop Chance (Bosses)", 40f, "Chance to drop from bosses.");
-        DropChance_Skill = ValheimEnchantmentSystem.config("Skill Scrolls", "Drop Chance (Skill exp)", 0.10f, "Chance to drop from enemies.");
-        DropChance_Skill_Bosses = ValheimEnchantmentSystem.config("Skill Scrolls", "Drop Chance (Skill exp)", 25f, "Chance to drop from bosses.");
+        DropChance_Skill = ValheimEnchantmentSystem.config("Skill Scrolls", "Drop Chance (Skill exp)", 0.20f, "Chance to drop from enemies.");
+        DropChance_Skill_Bosses = ValheimEnchantmentSystem.config("Skill Scrolls", "Drop Chance (Skill exp) (Bosses)", 25f, "Chance to drop from bosses.");
+        BlessedConvertRequirement = ValheimEnchantmentSystem.config("Scrolls", "Blessed Convert Requirement", 12, "Amount of normal scrolls required to craft a blessed scroll of the same tier.");
         ExcludePrefabsFromDrop = ValheimEnchantmentSystem.config("Scrolls", "Exclude Prefabs From Drop", "TentaRoot", "Comma separated list of prefabs to exclude from dropping scrolls.");
         RequiredLine_Config = ValheimEnchantmentSystem.config("Scrolls", "Required Line", RequiredLine.Five, "How many lines of the same item are required to combine.");
         ExcludePrefabsFromDrop.SettingChanged += FillExclude;
         FillExclude();
         
-        BiomeMapper.Add(Heightmap.Biome.Meadows,ValheimEnchantmentSystem.config("Scrolls", "Meadows Tier", "F", "Tier of scrolls Meadows (F D C B A S)"));
-        BiomeMapper.Add(Heightmap.Biome.BlackForest,ValheimEnchantmentSystem.config("Scrolls", "BlackForest Tier", "D", "Tier of scrolls BlackForest (F D C B A S)"));
-        BiomeMapper.Add(Heightmap.Biome.Swamp,ValheimEnchantmentSystem.config("Scrolls", "Swamp Tier", "C", "Tier of scrolls Swamp (F D C B A S)"));
-        BiomeMapper.Add(Heightmap.Biome.Ocean,ValheimEnchantmentSystem.config("Scrolls", "Ocean Tier", "C", "Tier of scrolls Ocean (F D C B A S)"));
-        BiomeMapper.Add(Heightmap.Biome.Mountain,ValheimEnchantmentSystem.config("Scrolls", "Mountain Tier", "B", "Tier of scrolls Mountain (F D C B A S)"));
-        BiomeMapper.Add(Heightmap.Biome.Plains,ValheimEnchantmentSystem.config("Scrolls", "Plains Tier", "A", "Tier of scrolls Plains (F D C B A S)"));
-        BiomeMapper.Add(Heightmap.Biome.Mistlands,ValheimEnchantmentSystem.config("Scrolls", "Mistlands Tier", "S", "Tier of scrolls Mistlands (F D C B A S)"));
-        BiomeMapper.Add(Heightmap.Biome.AshLands,ValheimEnchantmentSystem.config("Scrolls", "Ashlands Tier", "S", "Tier of scrolls Ashlands (F D C B A S)"));
-        BiomeMapper.Add(Heightmap.Biome.DeepNorth,ValheimEnchantmentSystem.config("Scrolls", "Deepnorth Tier", "S", "Tier of scrolls Deepnorth (F D C B A S)"));
+        BiomeMapper.Add(Heightmap.Biome.Meadows, ValheimEnchantmentSystem.config("Scrolls", "1 - Meadows Tier", "F", "Tier of scrolls Meadows (F E D C B A S)"));
+        BiomeMapper.Add(Heightmap.Biome.BlackForest, ValheimEnchantmentSystem.config("Scrolls", "2 - BlackForest Tier", "F", "Tier of scrolls BlackForest (F E D C B A S)"));
+        BiomeMapper.Add(Heightmap.Biome.Swamp, ValheimEnchantmentSystem.config("Scrolls", "3 - Swamp Tier", "E", "Tier of scrolls Swamp (F E D C B A S)"));
+        BiomeMapper.Add(Heightmap.Biome.Ocean, ValheimEnchantmentSystem.config("Scrolls", "4 - Ocean Tier", "E", "Tier of scrolls Ocean (F E D C B A S)"));
+        BiomeMapper.Add(Heightmap.Biome.Mountain, ValheimEnchantmentSystem.config("Scrolls", "5 - Mountain Tier", "D", "Tier of scrolls Mountain (F E D C B A S)"));
+        BiomeMapper.Add(Heightmap.Biome.Plains, ValheimEnchantmentSystem.config("Scrolls", "6 - Plains Tier", "C", "Tier of scrolls Plains (F E D C B A S)"));
+        BiomeMapper.Add(Heightmap.Biome.Mistlands, ValheimEnchantmentSystem.config("Scrolls", "7 - Mistlands Tier", "B", "Tier of scrolls Mistlands (F E D C B A S)"));
+        BiomeMapper.Add(Heightmap.Biome.AshLands, ValheimEnchantmentSystem.config("Scrolls", "8 - Ashlands Tier", "A", "Tier of scrolls Ashlands (F E D C B A S)"));
+        BiomeMapper.Add(Heightmap.Biome.DeepNorth, ValheimEnchantmentSystem.config("Scrolls", "9 - DeepNorth Tier", "S", "Tier of scrolls DeepNorth (F E D C B A S)"));
         
         
-        char[] DCBAS = {'F', 'D', 'C', 'B', 'A', 'S'};
-        foreach (char c in DCBAS)
+        char[] FEDCBAS = {'F', 'E', 'D', 'C', 'B', 'A', 'S'};
+        foreach (char c in FEDCBAS)
         {
-            Item weaponScroll = new Item(ValheimEnchantmentSystem._asset, $"kg_EnchantScroll_Weapon_{c}")
+            Item weaponScroll;
+            Item weaponScroll_Bless;
+            Item armorScroll;
+            Item armorScroll_Bless;
+            GameObject skillScrollPrefab;
+
+            if (c == 'E')
             {
-                Configurable = Configurability.Recipe
-            };
-            weaponScroll.Prefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_name = $"$kg_enchantscroll_weapon_{c}";
-            weaponScroll.Prefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_description = $"$kg_enchantscroll_weapon_description";
-            FillRecipe(weaponScroll, c, false);
-            Item weaponScroll_Bless = new Item(ValheimEnchantmentSystem._asset, $"kg_EnchantScroll_Weapon_Blessed_{c}")
-            { 
-                Configurable = Configurability.Recipe
-            };
-            weaponScroll_Bless.Prefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_name = $"$kg_enchantscroll_weapon_blessed_{c}";
-            weaponScroll_Bless.Prefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_description = $"$kg_enchantscroll_weapon_blessed_description";
-            FillRecipe(weaponScroll_Bless, c, true);
-            Item armorScroll = new Item(ValheimEnchantmentSystem._asset, $"kg_EnchantScroll_Armor_{c}")
+                GameObject weaponPrefab = ClonePrefab(ValheimEnchantmentSystem._asset.LoadAsset<GameObject>("kg_EnchantScroll_Weapon_S"), "kg_EnchantScroll_Weapon_E");
+                GameObject weaponBlessedPrefab = ClonePrefab(ValheimEnchantmentSystem._asset.LoadAsset<GameObject>("kg_EnchantScroll_Weapon_Blessed_S"), "kg_EnchantScroll_Weapon_Blessed_E");
+                GameObject armorPrefab = ClonePrefab(ValheimEnchantmentSystem._asset.LoadAsset<GameObject>("kg_EnchantScroll_Armor_S"), "kg_EnchantScroll_Armor_E");
+                GameObject armorBlessedPrefab = ClonePrefab(ValheimEnchantmentSystem._asset.LoadAsset<GameObject>("kg_EnchantScroll_Armor_Blessed_S"), "kg_EnchantScroll_Armor_Blessed_E");
+                skillScrollPrefab = ClonePrefab(ValheimEnchantmentSystem._asset.LoadAsset<GameObject>("kg_EnchantSkillScroll_S"), "kg_EnchantSkillScroll_E");
+
+                if (weaponPrefab == null || weaponBlessedPrefab == null || armorPrefab == null || armorBlessedPrefab == null || skillScrollPrefab == null) continue;
+
+                weaponScroll = new Item(weaponPrefab);
+                weaponScroll_Bless = new Item(weaponBlessedPrefab);
+                armorScroll = new Item(armorPrefab);
+                armorScroll_Bless = new Item(armorBlessedPrefab);
+            }
+            else
             {
-                Configurable = Configurability.Recipe
-            };
-            armorScroll.Prefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_name = $"$kg_enchantscroll_armor_{c}";
-            armorScroll.Prefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_description = $"$kg_enchantscroll_armor_description";
-            FillRecipe(armorScroll, c, false);
-            Item armorScroll_Bless = new Item(ValheimEnchantmentSystem._asset, $"kg_EnchantScroll_Armor_Blessed_{c}")
-            {
-                Configurable = Configurability.Recipe
-            };
-            armorScroll_Bless.Prefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_name = $"$kg_enchantscroll_armor_blessed_{c}";
-            armorScroll_Bless.Prefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_description = $"$kg_enchantscroll_armor_blessed_description";
-            FillRecipe(armorScroll_Bless, c, true);
+                GameObject weaponPrefab = ValheimEnchantmentSystem._asset.LoadAsset<GameObject>($"kg_EnchantScroll_Weapon_{c}");
+                GameObject weaponBlessedPrefab = ValheimEnchantmentSystem._asset.LoadAsset<GameObject>($"kg_EnchantScroll_Weapon_Blessed_{c}");
+                GameObject armorPrefab = ValheimEnchantmentSystem._asset.LoadAsset<GameObject>($"kg_EnchantScroll_Armor_{c}");
+                GameObject armorBlessedPrefab = ValheimEnchantmentSystem._asset.LoadAsset<GameObject>($"kg_EnchantScroll_Armor_Blessed_{c}");
+                skillScrollPrefab = ValheimEnchantmentSystem._asset.LoadAsset<GameObject>($"kg_EnchantSkillScroll_{c}");
+
+                if (weaponPrefab == null || weaponBlessedPrefab == null || armorPrefab == null || armorBlessedPrefab == null || skillScrollPrefab == null) continue;
+
+                weaponScroll = new Item(weaponPrefab);
+                weaponScroll_Bless = new Item(weaponBlessedPrefab);
+                armorScroll = new Item(armorPrefab);
+                armorScroll_Bless = new Item(armorBlessedPrefab);
+            }
+
+            weaponScroll.Configurable = Configurability.Recipe;
+            weaponScroll.Prefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_name = $"$kg_enchantscroll_{c}_weapon";
+            weaponScroll.Prefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_description = "$kg_enchantscroll_weapon_description";
+            FillRecipe(weaponScroll, c, false, false);
+            NameToPrefab[$"$kg_enchantscroll_{c}_weapon"] = weaponScroll.Prefab;
+
+            weaponScroll_Bless.Configurable = Configurability.Recipe;
+            weaponScroll_Bless.Prefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_name = $"$kg_enchantscroll_{c}_weapon_blessed";
+            weaponScroll_Bless.Prefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_description = "$kg_enchantscroll_weapon_blessed_description";
+            FillRecipe(weaponScroll_Bless, c, true, false);
+            weaponScroll_Bless["ConvertNormal"].CraftAmount = DefaultCraftAmount_Convert[c];
+            weaponScroll_Bless["ConvertNormal"].RequiredItems.Add(weaponScroll.Prefab.name, BlessedConvertRequirement);
+            weaponScroll_Bless["ConvertNormal"].Crafting.Add("kg_EnchantmentScrollStation", 1);
+            NameToPrefab[$"$kg_enchantscroll_{c}_weapon_blessed"] = weaponScroll_Bless.Prefab;
+
+            armorScroll.Configurable = Configurability.Recipe;
+            armorScroll.Prefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_name = $"$kg_enchantscroll_{c}_armor";
+            armorScroll.Prefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_description = "$kg_enchantscroll_armor_description";
+            FillRecipe(armorScroll, c, false, true);
+            NameToPrefab[$"$kg_enchantscroll_{c}_armor"] = armorScroll.Prefab;
+
+            armorScroll_Bless.Configurable = Configurability.Recipe;
+            armorScroll_Bless.Prefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_name = $"$kg_enchantscroll_{c}_armor_blessed";
+            armorScroll_Bless.Prefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_description = "$kg_enchantscroll_armor_blessed_description";
+            FillRecipe(armorScroll_Bless, c, true, true);
+            armorScroll_Bless["ConvertNormal"].CraftAmount = DefaultCraftAmount_Convert[c];
+            armorScroll_Bless["ConvertNormal"].RequiredItems.Add(armorScroll.Prefab.name, BlessedConvertRequirement);
+            armorScroll_Bless["ConvertNormal"].Crafting.Add("kg_EnchantmentScrollStation", 1);
+            NameToPrefab[$"$kg_enchantscroll_{c}_armor_blessed"] = armorScroll_Bless.Prefab;
           
             BookXPMapper.Add(c, ValheimEnchantmentSystem.config("Skill Scrolls", $"Skill EXP Scroll {c}", SkillExpScroll_DefaultValues[c], $"Skill EXP Scroll {c}"));
-            SkillScrolls.Add(ValheimEnchantmentSystem._asset.LoadAsset<GameObject>($"kg_EnchantSkillScroll_{c}"));
+            if (skillScrollPrefab.GetComponent<ItemDrop>() is { } skillItemDrop)
+                skillItemDrop.m_itemData.m_shared.m_name = $"$kg_enchantskillscroll_{c}";
+            NameToPrefab[$"$kg_enchantskillscroll_{c}"] = skillScrollPrefab;
+            SkillScrolls.Add(skillScrollPrefab);
 
             if (c != 'S')
             {
@@ -149,6 +239,30 @@ public static class ScrollItems
         }
         
         SkillScrolls.ForEach(x => x.AddComponent<ExpScroll>());
+    }
+
+    private static GameObject ClonePrefab(GameObject prefab, string newName)
+    {
+        if (prefab == null) return null;
+        bool wasActive = prefab.activeSelf;
+        prefab.SetActive(false);
+        GameObject clone = Object.Instantiate(prefab);
+        prefab.SetActive(wasActive);
+        clone.name = newName;
+        if (clone.GetComponent<ItemDrop>() is { } itemDrop)
+        {
+            itemDrop.m_itemData.m_dropPrefab = clone;
+        }
+        Object.DontDestroyOnLoad(clone);
+        if (PrefabRoot == null)
+        {
+            PrefabRoot = new GameObject("VES_PrefabRoot");
+            PrefabRoot.SetActive(false);
+            Object.DontDestroyOnLoad(PrefabRoot);
+        }
+        clone.transform.SetParent(PrefabRoot.transform, false);
+        clone.SetActive(wasActive);
+        return clone;
     }
 
     private static void FillExclude(object sender = null, EventArgs e = null)
@@ -169,15 +283,22 @@ public static class ScrollItems
         private static void Postfix(ZNetScene __instance)
         {
             foreach (GameObject go in SkillScrolls)
+            {
+                if (go == null) continue;
+                if (!__instance.m_prefabs.Contains(go))
+                    __instance.m_prefabs.Add(go);
                 __instance.m_namedPrefabs[go.name.GetStableHashCode()] = go;
+            }
         }
     }
     
     static void DropItem(GameObject prefab, Vector3 centerPos, float dropArea)
     {
+        if (prefab == null) return;
         Quaternion rotation = Quaternion.Euler(0f, Random.Range(0, 360), 0f);
         Vector3 b = Random.insideUnitSphere * dropArea;
         GameObject gameObject = Object.Instantiate(prefab, centerPos + b, rotation);
+        gameObject.SetActive(true);
         Rigidbody component = gameObject.GetComponent<Rigidbody>();
         if (component)
         {
@@ -192,7 +313,7 @@ public static class ScrollItems
     }
     
     [HarmonyPatch(typeof(Character), nameof(Character.OnDeath))]
-    [ClientOnlyPatch]
+    [ServerOnlyPatch]
     static class Tome_SpawnLoot_Patch
     {
         private static void TryDropDefault(char tier, bool isBoss, Vector3 pos)
@@ -237,7 +358,7 @@ public static class ScrollItems
     }
     
     [HarmonyPatch(typeof(Character), nameof(Character.OnDeath))]
-    [ClientOnlyPatch]
+    [ServerOnlyPatch]
     static class Tome_SpawnLootSkill_Patch
     {
         private static void TryDropSkillScroll(char tier, bool isBoss, Vector3 pos)
@@ -298,13 +419,24 @@ public static class ScrollItems
 
         public bool Interact(Humanoid user, bool hold, bool alt)
         {
+            if (_znv == null || !_znv.IsValid()) return false;
             string prefabName = global::Utils.GetPrefabName(gameObject);
             char tier = prefabName[prefabName.Length - 1];
             if (!BookXPMapper.TryGetValue(tier, out ConfigEntry<int> exp)) return false;
             Utils.IncreaseSkillEXP(Enchantment_Skill.SkillType_Enchantment, exp.Value);
-            Instantiate(ZNetScene.instance.GetPrefab("fx_Potion_frostresist"), Player.m_localPlayer.transform.position, Quaternion.identity);
+            if (!ValheimEnchantmentSystem.NoGraphics && ZNetScene.instance != null)
+            {
+                Player player = user as Player ?? Player.m_localPlayer;
+                if (player != null)
+                {
+                    GameObject fx = ZNetScene.instance.GetPrefab("fx_Potion_frostresist");
+                    if (fx != null)
+                        Instantiate(fx, player.transform.position, Quaternion.identity);
+                }
+            }
             _znv.ClaimOwnership();
-            ZNetScene.instance.Destroy(gameObject);
+            if (ZNetScene.instance != null)
+                ZNetScene.instance.Destroy(gameObject);
             return true;
         }
 
@@ -436,6 +568,17 @@ public static class ScrollItems
 
 
 
+    private static void FixDropPrefab(ItemDrop.ItemData item)
+    {
+        if (item != null && !item.m_dropPrefab && item.m_shared != null && item.m_shared.m_name != null)
+        {
+            if (NameToPrefab.TryGetValue(item.m_shared.m_name, out GameObject prefab))
+            {
+                item.m_dropPrefab = prefab;
+            }
+        }
+    }
+
     [HarmonyPatch(typeof(InventoryGrid), nameof(InventoryGrid.UpdateGui))]
     [ClientOnlyPatch]
     private static class InventoryGrid_UpdateGui_Patch
@@ -448,8 +591,11 @@ public static class ScrollItems
                 element.m_go.transform.Find("VES_Combine").gameObject.SetActive(false); 
             }
             if (!AllowScrollCombine.Value) return;
-            foreach (ItemDrop.ItemData item in __instance.m_inventory.GetAllItems().Where(i => UpgradeScrollHashset.Contains(i.m_dropPrefab?.name)))
+            foreach (ItemDrop.ItemData item in __instance.m_inventory.GetAllItems())
             {
+                FixDropPrefab(item);
+                if (item.m_dropPrefab == null || !UpgradeScrollHashset.Contains(item.m_dropPrefab.name)) continue;
+
                 switch (RequiredLine_Config.Value)
                 {
                     case RequiredLine.Three:
@@ -472,7 +618,7 @@ public static class ScrollItems
     
     private static readonly Dictionary<char, char> UpgradeMapper = new()
     {
-        {'F', 'D'}, {'D', 'C'}, {'C', 'B'}, {'B', 'A'}, {'A', 'S'}
+        {'F', 'E'}, {'E', 'D'}, {'D', 'C'}, {'C', 'B'}, {'B', 'A'}, {'A', 'S'}
     };
     
     
@@ -488,6 +634,8 @@ public static class ScrollItems
             Vector2i buttonPos = __instance.GetButtonPos(gameObject);
             ItemDrop.ItemData itemAt = __instance.m_inventory.GetItemAt(buttonPos.x, buttonPos.y);
             if (itemAt == null) return;
+            FixDropPrefab(itemAt);
+            if (itemAt.m_dropPrefab == null) return;
             string dropPrefab = itemAt.m_dropPrefab.name;
             if (!UpgradeScrollHashset.Contains(dropPrefab)) return;
             int toInstantiate;
@@ -517,11 +665,44 @@ public static class ScrollItems
         public static void Postfix(ItemDrop.ItemData item, bool crafting, ref string __result)
         {
             if (crafting || !AllowScrollCombine.Value) return;
+            FixDropPrefab(item);
             if (!item.m_dropPrefab) return;
             string dropPrefab = item.m_dropPrefab.name;
             if (!UpgradeScrollHashset.Contains(dropPrefab)) return;
             string shape = RequiredLine_Config.Value == RequiredLine.Three ? "<color=yellow><b>-</b></color>" : "<color=yellow><b>+</b></color>";
             __result += "\n\n$enchantment_putinlinetocombine".Localize(shape);
+        }
+    }
+
+    [HarmonyPatch(typeof(ItemDrop), nameof(ItemDrop.DropItem), typeof(ItemDrop.ItemData), typeof(int), typeof(Vector3), typeof(Quaternion))]
+    private static class ItemDrop_DropItem_Patch
+    {
+        [UsedImplicitly]
+        private static void Prefix(ItemDrop.ItemData item)
+        {
+            FixDropPrefab(item);
+        }
+
+        [UsedImplicitly]
+        private static void Postfix(ItemDrop __result)
+        {
+            if (__result != null && !__result.gameObject.activeSelf)
+            {
+                __result.gameObject.SetActive(true);
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(Inventory), nameof(Inventory.Save))]
+    private static class Inventory_Save_Patch
+    {
+        [UsedImplicitly]
+        private static void Prefix(Inventory __instance)
+        {
+            foreach (ItemDrop.ItemData item in __instance.GetAllItems())
+            {
+                FixDropPrefab(item);
+            }
         }
     }
 

@@ -50,11 +50,11 @@ public static class Notifications_UI
     [UsedImplicitly]
     private static void OnInit()
     {
-        _successWebhook = ValheimEnchantmentSystem.SyncedConfig.Bind("Notifications", "SuccessWebhook", "", "Discord webhook for notifications");
-        _failWebhook = ValheimEnchantmentSystem.SyncedConfig.Bind("Notifications", "FailWebhook", "", "Discord webhook for notifications");
+        _successWebhook = ValheimEnchantmentSystem.config("Notifications", "SuccessWebhook", "", "Discord webhook for notifications");
+        _failWebhook = ValheimEnchantmentSystem.config("Notifications", "FailWebhook", "", "Discord webhook for notifications");
         if (ValheimEnchantmentSystem.NoGraphics) return;
-        _filterConfig = ValheimEnchantmentSystem._thistype.Config.Bind("Notifications", "Filter", Filter.Success, "Filter notifications by type");
-        _duration = ValheimEnchantmentSystem._thistype.Config.Bind("Notifications", "Duration", 5, "Duration of notification");
+        _filterConfig = ValheimEnchantmentSystem.ClientConfig("Notifications", "Filter", Filter.Success, "Filter notifications by type");
+        _duration = ValheimEnchantmentSystem.ClientConfig("Notifications", "Duration", 5, "Duration of notification");
 
         UI = UnityEngine.Object.Instantiate(ValheimEnchantmentSystem._asset.LoadAsset<GameObject>("kg_EnchantmentUI_Notification"));
         UI.name = "kg_EnchantmentUI_Notification";

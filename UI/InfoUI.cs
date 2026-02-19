@@ -52,7 +52,6 @@ public static class Info_UI
             });
         }
 
-        Localization.instance.Localize(UI.transform);
         Default();
     }
 
@@ -289,8 +288,10 @@ public static class Info_UI
         
         if (string.IsNullOrWhiteSpace(_search.text))
         {
-            GameObject defaultChances = CreateElementWithText(null, GenerateChancesText(SyncedData.Synced_EnchantmentChances.Value), null, "$enchantment_defaultchances".Localize());
-            _fittersUpdate.Add(defaultChances);
+            GameObject defaultChancesWeapons = CreateElementWithText(null, GenerateChancesText(SyncedData.Synced_EnchantmentChances_Weapons.Value), null, "$enchantment_defaultchances_weapon".Localize());
+            _fittersUpdate.Add(defaultChancesWeapons);
+            GameObject defaultChancesArmor = CreateElementWithText(null, GenerateChancesText(SyncedData.Synced_EnchantmentChances_Armor.Value), null, "$enchantment_defaultchances_armor".Localize());
+            _fittersUpdate.Add(defaultChancesArmor);
         }
         
         List<SyncedData.OverrideChances> target = SyncedData.Overrides_EnchantmentChances.Value;
@@ -309,6 +310,8 @@ public static class Info_UI
     public static void Show()
     {
         Default();
+        if (Localization.instance != null)
+            Localization.instance.Localize(UI.transform);
         UI.SetActive(true);
         CreateElements();
     }

@@ -39,6 +39,7 @@
     <ItemGroup>
         <Compile Include="Configs\AutoISP.cs" />
         <Compile Include="Configs\BepInEx_ConfigurationManager.cs" />
+        <!-- <Compile Include="Configs\BlueprintIntegration.cs" /> Moved to standalone patch -->
         <Compile Include="Configs\Defaults.cs" />
         <Compile Include="Configs\SyncedData.cs" />
         <Compile Include="Enchantment_Core.cs" />
@@ -58,7 +59,7 @@
         <Compile Include="UI\InfoUI.cs" />
         <Compile Include="UI\MainUI.cs" />
         <Compile Include="UI\NotificationsUI.cs" />
-        <Compile Include="UI\SettingsUI.cs" />
+        <!-- <Compile Include="UI\SettingsUI.cs" /> Disabled to prevent conflicts with other mods -->
         <Compile Include="Utils\TerminalCommands.cs" />
         <Compile Include="Utils\Utils.cs" />
         <Compile Include="ValheimEnchantmentSystem.cs" />
@@ -217,13 +218,14 @@
       <Content Include="GithubReadme\parsed\Trader.md" />
       <Content Include="GithubReadme\parsed\Transmog.md" />
       <Content Include="GithubReadme\Patchnotes.md" />
+      <EmbeddedResource Include="translations\kg.ValheimEnchantmentSystem.Korean.yml" />
       <EmbeddedResource Include="icons\enchantment.png" />
       <Content Include="ILRepack.targets" />
       <EmbeddedResource Include="Resources\VES_Scripts.dll" />
       <Content Include="ThunderstorePackage\icon.png" />
       <Content Include="ThunderstorePackage\manifest.json" />
       <Content Include="ThunderstorePackage\README.md" />
-      <EmbeddedResource Include="translations\English.yml" />
+      <EmbeddedResource Include="translations\kg.ValheimEnchantmentSystem.English.yml" />
     </ItemGroup>
     <ItemGroup>
       <TypeScriptCompile Include="GithubReadme\node_modules\entities\lib\decode.d.ts" />
@@ -238,8 +240,26 @@
       <Reference Include="0Harmony">
         <HintPath>Libs\0Harmony.dll</HintPath>
       </Reference>
+      <Reference Include="Assembly-CSharp">
+        <HintPath>..\..\..\..\Program Files (x86)\Steam\steamapps\common\Valheim\valheim_Data\Managed\publicized_assemblies\Assembly-CSharp_publicized.dll</HintPath>
+      </Reference>
+      <Reference Include="assembly_googleanalytics">
+        <HintPath>..\..\..\..\Program Files (x86)\Steam\steamapps\common\Valheim\valheim_Data\Managed\publicized_assemblies\assembly_googleanalytics_publicized.dll</HintPath>
+      </Reference>
       <Reference Include="assembly_guiutils">
         <HintPath>Libs\assembly_guiutils.dll</HintPath>
+      </Reference>
+      <Reference Include="assembly_lux">
+        <HintPath>..\..\..\..\Program Files (x86)\Steam\steamapps\common\Valheim\valheim_Data\Managed\publicized_assemblies\assembly_lux_publicized.dll</HintPath>
+      </Reference>
+      <Reference Include="assembly_postprocessing">
+        <HintPath>..\..\..\..\Program Files (x86)\Steam\steamapps\common\Valheim\valheim_Data\Managed\publicized_assemblies\assembly_postprocessing_publicized.dll</HintPath>
+      </Reference>
+      <Reference Include="assembly_simplemeshcombine">
+        <HintPath>..\..\..\..\Program Files (x86)\Steam\steamapps\common\Valheim\valheim_Data\Managed\publicized_assemblies\assembly_simplemeshcombine_publicized.dll</HintPath>
+      </Reference>
+      <Reference Include="assembly_sunshafts">
+        <HintPath>..\..\..\..\Program Files (x86)\Steam\steamapps\common\Valheim\valheim_Data\Managed\publicized_assemblies\assembly_sunshafts_publicized.dll</HintPath>
       </Reference>
       <Reference Include="assembly_utils">
         <HintPath>Libs\assembly_utils.dll</HintPath>
@@ -305,30 +325,35 @@
       <Reference Include="UnityEngine.UIModule">
         <HintPath>Libs\UnityEngine.UIModule.dll</HintPath>
       </Reference>
-      <Reference Include="YamlDotNet, Version=15.0.0.0, Culture=neutral, PublicKeyToken=ec19458f3c15af5e, processorArchitecture=MSIL">
-        <HintPath>packages\YamlDotNet.15.1.2\lib\net47\YamlDotNet.dll</HintPath>
+      <Reference Include="YamlDotNet, Version=16.0.0.0, Culture=neutral, PublicKeyToken=ec19458f3c15af5e, processorArchitecture=MSIL">
+        <HintPath>packages\YamlDotNet.16.3.0\lib\net47\YamlDotNet.dll</HintPath>
       </Reference>
     </ItemGroup>
     <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets"/>
 
     <Target Name="Copy" AfterTargets="ILRepack">
-        <Exec Command="copy /Y &quot;$(TargetDir)$(AssemblyName).dll&quot; &quot;C:\Program Files (x86)\Steam\steamapps\common\Valheim\BepInEx\plugins\$(AssemblyName).dll&quot;" />
-        <Exec Command="copy /Y &quot;$(TargetDir)$(AssemblyName).dll&quot; &quot;C:\Program Files (x86)\Steam\steamapps\common\Valheim Dedicated Server\BepInEx\plugins\$(AssemblyName).dll&quot;" />
+        <!-- Auto-copy to game folders disabled - copy manually when needed -->
+        <!-- <Exec Command="copy /Y &quot;$(TargetDir)$(AssemblyName).dll&quot; &quot;C:\Program Files (x86)\Steam\steamapps\common\Valheim\BepInEx\plugins\$(AssemblyName).dll&quot;" /> -->
+        <!-- <Exec Command="copy /Y &quot;$(TargetDir)$(AssemblyName).dll&quot; &quot;C:\Program Files (x86)\Steam\steamapps\common\Valheim Dedicated Server\BepInEx\plugins\$(AssemblyName).dll&quot;" /> -->
         <Exec Command="pdb2mdb.exe &quot;$(TargetDir)$(AssemblyName).dll&quot;" />
-        <Exec Command="copy /Y &quot;$(TargetDir)$(AssemblyName).dll.mdb&quot; &quot;C:\Program Files (x86)\Steam\steamapps\common\Valheim\BepInEx\plugins\$(AssemblyName).dll.mdb&quot;" />
-        <Exec Command="copy /Y &quot;$(TargetDir)$(AssemblyName).dll.mdb&quot; &quot;C:\Program Files (x86)\Steam\steamapps\common\Valheim Dedicated Server\BepInEx\plugins\$(AssemblyName).dll.mdb&quot;" />
+        <!-- <Exec Command="copy /Y &quot;$(TargetDir)$(AssemblyName).dll.mdb&quot; &quot;C:\Program Files (x86)\Steam\steamapps\common\Valheim\BepInEx\plugins\$(AssemblyName).dll.mdb&quot;" /> -->
+        <!-- <Exec Command="copy /Y &quot;$(TargetDir)$(AssemblyName).dll.mdb&quot; &quot;C:\Program Files (x86)\Steam\steamapps\common\Valheim Dedicated Server\BepInEx\plugins\$(AssemblyName).dll.mdb&quot;" /> -->
 
         <Exec Command="copy /Y &quot;$(TargetDir)$(AssemblyName).dll&quot; &quot;$(ProjectDir)ThunderstorePackage\$(AssemblyName).dll&quot;" />
         <Exec Command="copy /Y &quot;$(TargetDir)$(AssemblyName).dll.mdb&quot; &quot;$(ProjectDir)ThunderstorePackage\$(AssemblyName).dll.mdb&quot;" />
     </Target>
-
-    <Import Project="packages\ILRepack.Lib.MSBuild.Task.2.0.18.2\build\ILRepack.Lib.MSBuild.Task.targets" Condition="Exists('packages\ILRepack.Lib.MSBuild.Task.2.0.18.2\build\ILRepack.Lib.MSBuild.Task.targets')" />
-
+    
+    <Target Name="CopyToDedicatedServer">
+        <Exec Command="copy &quot;$(TargetDir)kg.ValheimEnchantmentSystem.dll&quot; &quot;C:\Program Files (x86)\Steam\steamapps\common\Valheim Dedicated Server\BepInEx\plugins\&quot;" />
+    </Target>
+    
+    <Import Project="packages\ILRepack.Lib.MSBuild.Task.2.0.44.1\build\ILRepack.Lib.MSBuild.Task.targets" Condition="Exists('packages\ILRepack.Lib.MSBuild.Task.2.0.44.1\build\ILRepack.Lib.MSBuild.Task.targets')" />
+    
     <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
       <PropertyGroup>
         <ErrorText>This project references NuGet package(s) that are missing on this computer. Enable NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105.The missing file is {0}.</ErrorText>
       </PropertyGroup>
-      <Error Condition="!Exists('packages\ILRepack.Lib.MSBuild.Task.2.0.18.2\build\ILRepack.Lib.MSBuild.Task.targets')" Text="$([System.String]::Format('$(ErrorText)', 'packages\ILRepack.Lib.MSBuild.Task.2.0.18.2\build\ILRepack.Lib.MSBuild.Task.targets'))" />
+      <Error Condition="!Exists('packages\ILRepack.Lib.MSBuild.Task.2.0.44.1\build\ILRepack.Lib.MSBuild.Task.targets')" Text="$([System.String]::Format('$(ErrorText)', 'packages\ILRepack.Lib.MSBuild.Task.2.0.44.1\build\ILRepack.Lib.MSBuild.Task.targets'))" />
     </Target>
     
     <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

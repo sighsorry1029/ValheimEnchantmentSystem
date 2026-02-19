@@ -273,7 +273,12 @@ public static class Enchantment_Core
         public static void Postfix(ItemDrop.ItemData item, bool crafting, int qualityLevel, ref string __result)
         {
             bool blockShowEnchant = false;
-            if (item.Data().Get<Enchanted>() is { level: > 0 } en)
+            Enchanted en = item.Data().Get<Enchanted>();
+            int currentLevel = en ? en.level : 0;
+            string dropName = item.m_dropPrefab ? item.m_dropPrefab.name : Utils.GetPrefabNameByItemName(item.m_shared.m_name);
+            var reqs = SyncedData.GetReqs(dropName);
+
+            if (currentLevel > 0)
             {
                 SyncedData.Stat_Data stats = SyncedData.GetStatIncrease(en);
                 string color = SyncedData.GetColor(en, out _, true).IncreaseColorLight();
@@ -312,24 +317,30 @@ public static class Enchantment_Core
                             $"$1 (<color={color}>+{(damage.m_spirit * damagePercent / 100f * minFactor).RoundOne()} - {(damage.m_spirit * damagePercent / 100f * maxFactor).RoundOne()}</color>)");
                         __result += $"\n<color={color}>•</color> $enchantment_bonusespercentdamage (<color={color}>+{damagePercent}%</color>)";
                     }
-                    int armorPercent = stats.armor_percentage;
+                    float armorPercent = stats.armor_percentage;
                     if (armorPercent > 0)
                     {
                         __result = new Regex("(\\$item_blockarmor.*)").Replace(__result, $"$1 (<color={color}>+{(item.GetBaseBlockPower(qualityLevel) * armorPercent / 100f).RoundOne()}({armorPercent}%)</color>)");
                         __result = new Regex("(\\$item_armor.*)").Replace(__result, $"$1 (<color={color}>+{(item.GetArmor(qualityLevel, item.m_worldLevel) * armorPercent / 100f).RoundOne()}({armorPercent}%)</color>)");
                         __result += $"\n<color={color}>•</color> $enchantment_bonusespercentarmor (<color={color}>+{armorPercent}%</color>)";
                     }
-                    int armor = stats.armor;
+                    float armor = stats.armor;
                     if (armor > 0)
                     {
                         __result = new Regex("(\\$item_blockarmor.*)").Replace(__result, $"$1 (<color={color}>+{stats.armor}</color>)");
                         __result = new Regex("(\\$item_armor.*)").Replace(__result, $"$1 (<color={color}>+{stats.armor}</color>)");
                     }
 
-                    __result += stats.BuildAdditionalStats(color);
+                    __result += stats.BuildAdditionalStats(color, true);
                 }
+            }
 
-                int chance = en.GetEnchantmentChance();
+            if (reqs != null)
+            {
+                string color = SyncedData.GetColor(dropName, currentLevel, out _, true).IncreaseColorLight();
+                if (currentLevel == 0) color = "white";
+
+                int chance = SyncedData.GetEnchantmentChance(dropName, currentLevel, item.IsWeapon()).success;
                 if (chance > 0)
                 {
                     __result += $"\n<color={color}>•</color> $enchantment_chance (<color={color}>{chance}%</color>)";
@@ -339,45 +350,23 @@ public static class Enchantment_Core
                         __result += $" (<color={color}>+{additionalChance.RoundOne()}%</color> $enchantment_additionalchance)";
                     }
                 }
-                if (chance <= 0)
+                else if (currentLevel > 0)
                 {
                     blockShowEnchant = true;
                     __result += $"\n<color={color}>•</color> $enchantment_maxedout".Localize();
                 }
+
+                if (!blockShowEnchant && reqs.enchant_prefab.IsValid())
+                {
+                    char tier = reqs.enchant_prefab.prefab[reqs.enchant_prefab.prefab.Length - 1];
+                    __result += $"\n<color=yellow>• $enchantment_canbeenchantedwith_tier</color>".Localize(tier.ToString());
+
+                    if (reqs.required_skill > 0)
+                    {
+                        __result += "\n<color=yellow>• $enchantment_requiresskilllevel</color>".Localize(reqs.required_skill.ToString());
+                    }
+                }
             }
-
-
-            if (blockShowEnchant) return;
-            string dropName = item.m_dropPrefab
-                ? item.m_dropPrefab.name
-                : Utils.GetPrefabNameByItemName(item.m_shared.m_name);
-            if (SyncedData.GetReqs(dropName) is { } reqs)
-            {
-                string canBe = $"\n• $enchantment_canbeenchantedwith:";
-                if (reqs.enchant_prefab.IsValid())
-                {
-                    string mainName = ZNetScene.instance.GetPrefab(reqs.enchant_prefab.prefab).GetComponent<ItemDrop>()
-                        .m_itemData.m_shared.m_name;
-                    int val1 = reqs.enchant_prefab.amount;
-                    canBe += $"\n<color=yellow>• {mainName} x{val1}</color>";
-                }
-
-                if (reqs.blessed_enchant_prefab.IsValid())
-                {
-                    string blessName = ZNetScene.instance.GetPrefab(reqs.blessed_enchant_prefab.prefab)
-                        .GetComponent<ItemDrop>().m_itemData.m_shared.m_name;
-                    int val2 = reqs.blessed_enchant_prefab.amount;
-                    canBe += $"\n<color=yellow>• {blessName} x{val2}</color>";
-                }
-
-                if (reqs.required_skill > 0)
-                {
-                    canBe += "\n<color=yellow>• $enchantment_requiresskilllevel</color>".Localize(reqs.required_skill.ToString());
-                }
-
-                __result += canBe;
-            }
-
         }
     }
  

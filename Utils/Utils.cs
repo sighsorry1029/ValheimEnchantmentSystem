@@ -67,12 +67,28 @@ public static class Utils
 
     public static string Localize(this string text)
     {
-        return string.IsNullOrEmpty(text) ? string.Empty : Localization.instance.Localize(text);
+        if (string.IsNullOrEmpty(text)) return string.Empty;
+        try
+        {
+            return Localization.instance?.Localize(text) ?? text;
+        }
+        catch
+        {
+            return text;
+        }
     }
 
     public static string Localize(this string text, params string[] args)
     {
-        return string.IsNullOrEmpty(text) ? string.Empty : Localization.instance.Localize(text, args);
+        if (string.IsNullOrEmpty(text)) return string.Empty;
+        try
+        {
+            return Localization.instance?.Localize(text, args) ?? text;
+        }
+        catch
+        {
+            return text;
+        }
     }
 
     public static bool StlocIndex(this object obj, int index) =>
@@ -279,6 +295,7 @@ public static class Utils
             itemDrop.m_itemData.m_stack = count;
             itemDrop.m_itemData.m_durability = itemDrop.m_itemData.GetMaxDurability();
             itemDrop.Save();
+            go.SetActive(true);
             if (inventory.CanAddItem(go))
             {
                 inventory.AddItem(itemDrop.m_itemData);
@@ -295,6 +312,7 @@ public static class Utils
                 itemDrop.m_itemData.m_quality = level;
                 itemDrop.m_itemData.m_durability = itemDrop.m_itemData.GetMaxDurability();
                 itemDrop.Save();
+                go.SetActive(true);
                 if (inventory.CanAddItem(go))
                 {
                     inventory.AddItem(itemDrop.m_itemData);

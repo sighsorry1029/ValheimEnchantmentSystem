@@ -32,9 +32,9 @@ public static class Enchantment_VFX
         VFXs.Add(ValheimEnchantmentSystem._asset.LoadAsset<Material>("Enchantment_VFX_Mat4"));
         VES_MPE = ValheimEnchantmentSystem._asset.LoadAsset<GameObject>("VES_MPE");
         HOTBAR_PART = ValheimEnchantmentSystem._asset.LoadAsset<GameObject>("Enchantment_HotbarPart");
-        _enableHotbarVisual = ValheimEnchantmentSystem._thistype.Config.Bind("Visual", "EnableHotbarVisual", true, "Enable hotbar visual");
-        _enableInventoryVisual = ValheimEnchantmentSystem._thistype.Config.Bind("Visual", "EnableInventoryVisual", true, "Enable inventory visual");
-        _enableMainVFX = ValheimEnchantmentSystem._thistype.Config.Bind("Visual", "EnableMainVFX", true, "Enable main VFX");
+        _enableHotbarVisual = ValheimEnchantmentSystem.ClientConfig("Visual", "EnableHotbarVisual", true, "Enable hotbar visual");
+        _enableInventoryVisual = ValheimEnchantmentSystem.ClientConfig("Visual", "EnableInventoryVisual", true, "Enable inventory visual");
+        _enableMainVFX = ValheimEnchantmentSystem.ClientConfig("Visual", "EnableMainVFX", true, "Enable main VFX");
     }
 
     [HarmonyPatch(typeof(Humanoid), nameof(Humanoid.SetupVisEquipment))]
@@ -376,6 +376,7 @@ public static class Enchantment_VFX
         [UsedImplicitly]
         private static void Postfix(ItemDrop __instance)
         {
+            if (__instance == null || __instance.m_itemData == null) return;
             if(__instance.m_itemData.Data()?.Get<Enchantment_Core.Enchanted>() is not { level: > 0 } en) return;
             string prefabName = global::Utils.GetPrefabName(__instance.gameObject);
             string color = SyncedData.GetColor(prefabName, en.level, out int variant, false);
@@ -403,16 +404,25 @@ public static class Enchantment_VFX
         [UsedImplicitly]
         private static void Postfix(ItemStand __instance, bool __state)
         {
-            if (!__instance.m_nview.IsValid()) return;
+            if (__instance == null || __instance.m_nview == null || !__instance.m_nview.IsValid()) return;
             if(!__state) return;
             GameObject visualItem = __instance.m_visualItem;
             if (!visualItem) return;   
             
-            string itemPrefab = __instance.m_nview.GetZDO().GetString(ZDOVars.s_item);
+            ZDO zdo = __instance.m_nview.GetZDO();
+            if (zdo == null) return;
+            
+            string itemPrefab = zdo.GetString(ZDOVars.s_item);
+            if (string.IsNullOrEmpty(itemPrefab)) return;
+            
             GameObject prefab = ZNetScene.instance.GetPrefab(itemPrefab);
             if(!prefab) return;
-            ItemDrop.ItemData itemData = prefab.GetComponent<ItemDrop>().m_itemData.Clone();
-            ItemDrop.LoadFromZDO(itemData, __instance.m_nview.m_zdo);
+            
+            ItemDrop itemDrop = prefab.GetComponent<ItemDrop>();
+            if (itemDrop == null) return;
+            
+            ItemDrop.ItemData itemData = itemDrop.m_itemData.Clone();
+            ItemDrop.LoadFromZDO(itemData, zdo);
             if(itemData.Data()?.Get<Enchantment_Core.Enchanted>() is not {level: > 0} en) return;
             string color = SyncedData.GetColor(itemPrefab, en.level, out int variant, false);
             AttachMeshEffect(visualItem, color.ToColorAlpha(), variant);

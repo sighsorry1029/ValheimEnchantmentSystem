@@ -23,8 +23,6 @@ public static class BepInEx_ConfigurationManager
     private static void Modify(BaseUnityPlugin plugin, ref IEnumerable<object> __result)
     {
         if (plugin != ValheimEnchantmentSystem._thistype) return;
-        IEnumerable<object> syncedConfig = ValheimEnchantmentSystem.SyncedConfig.Select(kvp => Activator.CreateInstance(activator, kvp.Value, plugin));
-        IEnumerable<object> itemConfig = ValheimEnchantmentSystem.ItemConfig.Select(kvp => Activator.CreateInstance(activator, kvp.Value, plugin));
-        __result = syncedConfig.Concat(itemConfig);
+        __result = plugin.Config.Select(kvp => Activator.CreateInstance(activator, kvp.Value, plugin));
     }
 }

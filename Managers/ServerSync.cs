@@ -23,6 +23,8 @@ namespace ServerSync;
 public abstract class OwnConfigEntryBase
 {
 	public object? LocalBaseValue;
+	public object? LastSyncedValue;
+	public bool HasSyncedValue;
 	public abstract ConfigEntryBase BaseConfig { get; }
 
 	public bool SynchronizedConfig = true;
@@ -196,11 +198,53 @@ public class ConfigSync
 		if (configData(configEntry) is not SyncedConfigEntry<T> syncedEntry)
 		{
 			syncedEntry = new SyncedConfigEntry<T>(configEntry);
+			syncedEntry.LastSyncedValue = configEntry.BoxedValue;
+			syncedEntry.HasSyncedValue = true;
 			AccessTools.DeclaredField(typeof(ConfigDescription), "<Tags>k__BackingField").SetValue(configEntry.Description, new object[] { new ConfigurationManagerAttributes() }.Concat(configEntry.Description.Tags ?? Array.Empty<object>()).Concat(new[] { syncedEntry }).ToArray());
+			bool reverting = false;
 			configEntry.SettingChanged += (_, _) =>
 			{
+				if (reverting)
+				{
+					return;
+				}
+
 				if (!ProcessingServerUpdate && syncedEntry.SynchronizedConfig)
 				{
+					if (!isWritableConfig(syncedEntry))
+					{
+						object? revertValue;
+						if (syncedEntry.HasSyncedValue)
+						{
+							revertValue = syncedEntry.LastSyncedValue;
+						}
+						else if (syncedEntry.LocalBaseValue != null)
+						{
+							revertValue = syncedEntry.LocalBaseValue;
+						}
+						else
+						{
+							return;
+						}
+
+						reverting = true;
+						try
+						{
+							configEntry.BoxedValue = revertValue;
+						}
+						finally
+						{
+							reverting = false;
+						}
+						return;
+					}
+
+					if (IsSourceOfTruth)
+					{
+						syncedEntry.LastSyncedValue = configEntry.BoxedValue;
+						syncedEntry.HasSyncedValue = true;
+					}
+
 					Broadcast(ZRoutedRpc.Everybody, configEntry);
 				}
 			};
@@ -444,6 +488,8 @@ public class ConfigSync
 					configFile.SaveOnConfigSet = false;
 				}
 				configKv.Key.BaseConfig.BoxedValue = configKv.Value;
+				configKv.Key.LastSyncedValue = configKv.Value;
+				configKv.Key.HasSyncedValue = true;
 			}
 			if (configFile is not null)
 			{

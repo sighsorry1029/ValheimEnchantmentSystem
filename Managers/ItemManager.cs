@@ -1,9 +1,18 @@
-﻿using System.ComponentModel;
+﻿using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.ComponentModel;
 using System.Globalization;
+using System.Linq;
+using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
+using BepInEx;
+using BepInEx.Configuration;
+using HarmonyLib;
 using JetBrains.Annotations;
+using UnityEngine;
 
 namespace ItemManager;
 
@@ -14,10 +23,12 @@ public enum CraftingTable
 	Inventory,
 	[InternalName("piece_workbench")] Workbench,
 	[InternalName("piece_cauldron")] Cauldron,
+	[InternalName("piece_MeadCauldron")] MeadCauldron,
 	[InternalName("forge")] Forge,
 	[InternalName("piece_artisanstation")] ArtisanTable,
 	[InternalName("piece_stonecutter")] StoneCutter,
 	[InternalName("piece_magetable")] MageTable,
+	[InternalName("piece_preptable")] PrepTable,
 	[InternalName("blackforge")] BlackForge,
 	Custom,
 }
@@ -156,6 +167,7 @@ public class Item
 		public ConfigEntry<int>? maximumTableLevel;
 		public ConfigEntry<Toggle> requireOneIngredient = null!;
 		public ConfigEntry<float> qualityResultAmountMultiplier = null!;
+		public ConfigEntry<int> craftAmount = null!;
 	}
 
 	private class TraderConfig
@@ -402,7 +414,13 @@ public class Item
 
 	private delegate void setDmgFunc(ref HitData.DamageTypes dmg, float value);
 
-	internal static void reloadConfigDisplay() => configManager?.GetType().GetMethod("BuildSettingList")!.Invoke(configManager, Array.Empty<object>());
+	internal static void reloadConfigDisplay()
+	{
+		if (configManager?.GetType().GetProperty("DisplayingWindow")!.GetValue(configManager) is true)
+		{
+			configManager.GetType().GetMethod("BuildSettingList")!.Invoke(configManager, Array.Empty<object>());
+		}
+	}
 
 	private void UpdateItemTableConfig(string recipeKey, CraftingTable table, string customTableValue)
 	{
@@ -448,8 +466,9 @@ public class Item
 
 			foreach (Item item in registeredItems.Where(i => i.configurability != Configurability.Disabled))
 			{
+				if (item.Prefab == null || item.Prefab.GetComponent<ItemDrop>() == null) continue;
 				string nameKey = item.Prefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_name;
-				string englishName = new Regex("""['\["\]]""").Replace(english.Localize(nameKey), "").Trim();
+				string englishName = new Regex(@"[=\n\t\\""\'\[\]]*").Replace(english.Localize(nameKey), "").Trim();
 				string localizedName = Localization.instance.Localize(nameKey).Trim();
 
 				int order = 0;
@@ -500,6 +519,18 @@ public class Item
 							{
 								cfg.maximumTableLevel = config(englishName, "Maximum Crafting Station Level" + configSuffix, item.MaximumRequiredStationLevel == int.MaxValue ? item.Recipes[configKey].Crafting.Stations.First().level + item.Prefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_maxQuality - 1 : item.MaximumRequiredStationLevel, new ConfigDescription($"Maximum crafting station level to upgrade and repair {englishName}.", null, tableLevelAttributes));
 							}
+
+							cfg.craftAmount = config(englishName, "Craft Amount" + configSuffix, item.Recipes[configKey].CraftAmount, new ConfigDescription($"The number of items that should be given to the player with a single craft of {englishName}.", null, new ConfigurationManagerAttributes { Order = --order, Browsable = (item.configurationVisible & Configurability.Recipe) != 0, Category = localizedName }));
+							cfg.craftAmount.SettingChanged += (_, _) =>
+							{
+								if (activeRecipes.ContainsKey(item) && activeRecipes[item].TryGetValue(configKey, out List<Recipe> recipes))
+								{
+									foreach (Recipe recipe in recipes)
+									{
+										recipe.m_amount = cfg.craftAmount.Value;
+									}
+								}
+							};
 
 							bool QualityResultBrowsability() => cfg.requireOneIngredient.Value == Toggle.On;
 							cfg.requireOneIngredient = config(englishName, "Require only one resource" + configSuffix, item.Recipes[configKey].RequireOnlyOneIngredient ? Toggle.On : Toggle.Off, new ConfigDescription($"Whether only one of the ingredients is needed to craft {englishName}", null, new ConfigurationManagerAttributes { Order = --order, Category = localizedName }));
@@ -1026,7 +1057,7 @@ public class Item
 	[HarmonyPriority(Priority.Last)]
 	internal static void Patch_ObjectDBInit(ObjectDB __instance)
 	{
-		if (__instance.GetItemPrefab("Wood") == null)
+		if (__instance.GetItemPrefab("YagluthDrop") == null)
 		{
 			return;
 		}
@@ -1534,7 +1565,7 @@ public class Item
 
 			GUILayout.Label("Chance: ");
 			float chance = drop.chance;
-			if (float.TryParse(GUILayout.TextField((chance * 100).ToString(CultureInfo.InvariantCulture), new GUIStyle(GUI.skin.textField) { fixedWidth = 45 }), out float newChance) && !Mathf.Approximately(newChance / 100, chance) && !locked)
+			if (float.TryParse(GUILayout.TextField((chance * 100).ToString(CultureInfo.InvariantCulture), new GUIStyle(GUI.skin.textField) { fixedWidth = 45 }), NumberStyles.Float, CultureInfo.InvariantCulture, out float newChance) && !Mathf.Approximately(newChance / 100, chance) && !locked)
 			{
 				chance = newChance / 100;
 				wasUpdated = true;
@@ -1746,31 +1777,11 @@ public class Item
 	private static bool hasConfigSync = true;
 	private static object? _configSync;
 
-	private static object? configSync
-	{
-		get
-		{
-			if (_configSync == null && hasConfigSync)
-			{
-				if (Assembly.GetExecutingAssembly().GetType("ServerSync.ConfigSync") is { } configSyncType)
-				{
-					_configSync = Activator.CreateInstance(configSyncType, plugin.Info.Metadata.GUID + " ItemManager");
-					configSyncType.GetField("CurrentVersion").SetValue(_configSync, plugin.Info.Metadata.Version.ToString());
-					configSyncType.GetProperty("IsLocked")!.SetValue(_configSync, true);
-				}
-				else
-				{
-					hasConfigSync = false;
-				}
-			}
-
-			return _configSync;
-		}
-	}
+    private static object? configSync => kg.ValheimEnchantmentSystem.ValheimEnchantmentSystem.ConfigSync;
 
 	private static ConfigEntry<T> config<T>(string group, string name, T value, ConfigDescription description)
 	{
-		ConfigEntry<T> configEntry = kg.ValheimEnchantmentSystem.ValheimEnchantmentSystem.ItemConfig.Bind(group, name, value, new ConfigDescription(""));
+		ConfigEntry<T> configEntry = plugin.Config.Bind(group, name, value, description);
 
 		configSync?.GetType().GetMethod("AddConfigEntry")!.MakeGenericMethod(typeof(T)).Invoke(configSync, new object[] { configEntry });
 
@@ -1788,7 +1799,11 @@ public class LocalizeKey
 	public readonly string Key;
 	public readonly Dictionary<string, string> Localizations = new();
 
-	public LocalizeKey(string key) => Key = key.Replace("$", "");
+	public LocalizeKey(string key)
+	{
+		Key = key.Replace("$", "");
+		keys.Add(this);
+	}
 
 	public void Alias(string alias)
 	{
@@ -1798,7 +1813,10 @@ public class LocalizeKey
 			alias = $"${alias}";
 		}
 		Localizations["alias"] = alias;
-		Localization.instance.AddWord(Key, Localization.instance.Localize(alias));
+		if (Localization.m_instance != null)
+		{
+			Localization.instance.AddWord(Key, Localization.instance.Localize(alias));
+		}
 	}
 
 	public LocalizeKey English(string key) => addForLang("English", key);
@@ -1839,14 +1857,18 @@ public class LocalizeKey
 	private LocalizeKey addForLang(string lang, string value)
 	{
 		Localizations[lang] = value;
-		if (Localization.instance.GetSelectedLanguage() == lang)
+		if (Localization.m_instance != null)
 		{
-			Localization.instance.AddWord(Key, value);
+			if (Localization.instance.GetSelectedLanguage() == lang)
+			{
+				Localization.instance.AddWord(Key, value);
+			}
+			else if (lang == "English" && !Localization.instance.m_translations.ContainsKey(Key))
+			{
+				Localization.instance.AddWord(Key, value);
+			}
 		}
-		else if (lang == "English" && !Localization.instance.m_translations.ContainsKey(Key))
-		{
-			Localization.instance.AddWord(Key, value);
-		}
+
 		return this;
 	}
 
@@ -1861,7 +1883,7 @@ public class LocalizeKey
 			}
 			else if (key.Localizations.TryGetValue("alias", out string alias))
 			{
-				Localization.instance.AddWord(key.Key, Localization.instance.Localize(alias));
+				__instance.AddWord(key.Key, Localization.instance.Localize(alias));
 			}
 		}
 	}
@@ -1986,6 +2008,7 @@ public static class PrefabManager
 	{
 		foreach (GameObject prefab in prefabs)
 		{
+			if (!prefab || !prefab.GetComponent<ItemDrop>()) continue;
 			if (!__instance.m_items.Contains(prefab))
 			{
 				__instance.m_items.Add(prefab);
@@ -2057,4 +2080,9 @@ public class Conversion
 	{
 		outputItem.Conversions.Add(this);
 	}
+}
+
+public static class ItemManagerVersion
+{
+	public const string Version = "1.2.9";
 }
