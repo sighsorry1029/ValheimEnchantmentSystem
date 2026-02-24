@@ -1,7 +1,9 @@
-﻿using ItemManager;
+using kg.ValheimEnchantmentSystem.Managers.ItemManager;
 using JetBrains.Annotations;
 using kg.ValheimEnchantmentSystem.Misc;
 using kg.ValheimEnchantmentSystem.UI;
+using System.ComponentModel;
+using kg.ValheimEnchantmentSystem.Managers.PieceManager;
 using Object = UnityEngine.Object;
 using Random = UnityEngine.Random;
 
@@ -23,18 +25,20 @@ public static class ScrollItems
     private static ConfigEntry<bool> MonsterDroppingScrolls;
     private static ConfigEntry<bool> MonsterDroppingSkilllScrolls;
 
-    private static ConfigEntry<int> BlessedConvertRequirement;
-
     private static ConfigEntry<string> ExcludePrefabsFromDrop;
     
     private static readonly Dictionary<Heightmap.Biome, ConfigEntry<string>> BiomeMapper = new();
     private static readonly Dictionary<char, ConfigEntry<int>> BookXPMapper = new();
     private static readonly List<GameObject> SkillScrolls = new(5);
     
-    private enum RequiredLine { Three, Five}
+    private enum RequiredShape
+    {
+        [Description("three in a row")] Row3,
+        [Description("five in a cross")] Cross5
+    }
     
     private static ConfigEntry<bool> AllowScrollCombine;
-    private static ConfigEntry<RequiredLine> RequiredLine_Config;
+    private static ConfigEntry<RequiredShape> RequiredShape_Config;
 
     private static readonly Dictionary<char, int> SkillExpScroll_DefaultValues = new()
     {
@@ -102,6 +106,11 @@ public static class ScrollItems
     {
         { 'F', 1 }, { 'E', 1 }, { 'D', 1 }, { 'C', 1 }, { 'B', 1 }, { 'A', 1 }, { 'S', 1 }
     };
+
+    private const int DefaultBlessedConvertRequirement = 12;
+
+    private const int AllowCombineOrder = 1000;
+    private const int RequiredLineOrder = 999;
     
     private static void FillRecipe(Item item, char tier, bool bless, bool isArmor)
     {
@@ -122,11 +131,36 @@ public static class ScrollItems
         }
         item.Crafting.Add("kg_EnchantmentScrollStation", 1);
     }
+
+    private static void SetConfigOrder(ConfigEntryBase config, int order)
+    {
+        foreach (object tag in config.Description.Tags)
+        {
+            if (tag is ServerSync.ConfigurationManagerAttributes attrs)
+            {
+                attrs.Order = order;
+                return;
+            }
+        }
+    }
     
     [UsedImplicitly]
     private static void OnInit()
     {
-        AllowScrollCombine = ValheimEnchantmentSystem.config("Scrolls", "Allow Combine", true, "Allow combining scrolls.");
+        // Register Enchantment Scroll Station as a Piece via PieceManager
+        var scrollStation = new BuildPiece(ValheimEnchantmentSystem._asset, "kg_EnchantmentScrollStation");
+        var scrollStationComp = scrollStation.Prefab.GetComponent<Piece>();
+        scrollStationComp.m_name = "$kg_enchantment_scrollstation";
+        scrollStationComp.m_description = "$kg_enchantment_scrollstation_description";
+        scrollStation.Category.Set(kg.ValheimEnchantmentSystem.Managers.PieceManager.BuildPieceCategory.Crafting);
+        scrollStation.Tool.Add("Hammer");
+        scrollStation.Crafting.Set(kg.ValheimEnchantmentSystem.Managers.PieceManager.CraftingTable.Workbench);
+        scrollStation.RequiredItems.Add("SurtlingCore", 3, true);
+        scrollStation.RequiredItems.Add("Stone", 30, false);
+        scrollStation.RequiredItems.Add("Flint", 20, false);
+
+        AllowScrollCombine = ValheimEnchantmentSystem.config("Scrolls", "Allow Combine", true, "Allow combining scrolls by arranging those in a certain shape and right-clicking the center.");
+        RequiredShape_Config = ValheimEnchantmentSystem.config("Scrolls", "Required Shape", RequiredShape.Cross5, "what shape of the same items is required to combine");
         CombineOutline = ValheimEnchantmentSystem._asset.LoadAsset<GameObject>("Enchantment_CombinePart");
         MonsterDroppingScrolls = ValheimEnchantmentSystem.config("Scrolls", "Drop From Monsters", true, "Allow monsters to drop scrolls.");
         MonsterDroppingSkilllScrolls = ValheimEnchantmentSystem.config("Skill Scrolls", "Drop From Monsters (Skill exp)", true, "Allow monsters to drop enchant skill exp scrolls.");
@@ -136,9 +170,9 @@ public static class ScrollItems
         DropChance_Blessed_Bosses = ValheimEnchantmentSystem.config("Scrolls", "Blessed Drop Chance (Bosses)", 40f, "Chance to drop from bosses.");
         DropChance_Skill = ValheimEnchantmentSystem.config("Skill Scrolls", "Drop Chance (Skill exp)", 0.20f, "Chance to drop from enemies.");
         DropChance_Skill_Bosses = ValheimEnchantmentSystem.config("Skill Scrolls", "Drop Chance (Skill exp) (Bosses)", 25f, "Chance to drop from bosses.");
-        BlessedConvertRequirement = ValheimEnchantmentSystem.config("Scrolls", "Blessed Convert Requirement", 12, "Amount of normal scrolls required to craft a blessed scroll of the same tier.");
         ExcludePrefabsFromDrop = ValheimEnchantmentSystem.config("Scrolls", "Exclude Prefabs From Drop", "TentaRoot", "Comma separated list of prefabs to exclude from dropping scrolls.");
-        RequiredLine_Config = ValheimEnchantmentSystem.config("Scrolls", "Required Line", RequiredLine.Five, "How many lines of the same item are required to combine.");
+        SetConfigOrder(AllowScrollCombine, AllowCombineOrder);
+        SetConfigOrder(RequiredShape_Config, RequiredLineOrder);
         ExcludePrefabsFromDrop.SettingChanged += FillExclude;
         FillExclude();
         
@@ -204,7 +238,7 @@ public static class ScrollItems
             weaponScroll_Bless.Prefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_description = "$kg_enchantscroll_weapon_blessed_description";
             FillRecipe(weaponScroll_Bless, c, true, false);
             weaponScroll_Bless["ConvertNormal"].CraftAmount = DefaultCraftAmount_Convert[c];
-            weaponScroll_Bless["ConvertNormal"].RequiredItems.Add(weaponScroll.Prefab.name, BlessedConvertRequirement);
+            weaponScroll_Bless["ConvertNormal"].RequiredItems.Add(weaponScroll.Prefab.name, DefaultBlessedConvertRequirement);
             weaponScroll_Bless["ConvertNormal"].Crafting.Add("kg_EnchantmentScrollStation", 1);
             NameToPrefab[$"$kg_enchantscroll_{c}_weapon_blessed"] = weaponScroll_Bless.Prefab;
 
@@ -219,7 +253,7 @@ public static class ScrollItems
             armorScroll_Bless.Prefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_description = "$kg_enchantscroll_armor_blessed_description";
             FillRecipe(armorScroll_Bless, c, true, true);
             armorScroll_Bless["ConvertNormal"].CraftAmount = DefaultCraftAmount_Convert[c];
-            armorScroll_Bless["ConvertNormal"].RequiredItems.Add(armorScroll.Prefab.name, BlessedConvertRequirement);
+            armorScroll_Bless["ConvertNormal"].RequiredItems.Add(armorScroll.Prefab.name, DefaultBlessedConvertRequirement);
             armorScroll_Bless["ConvertNormal"].Crafting.Add("kg_EnchantmentScrollStation", 1);
             NameToPrefab[$"$kg_enchantscroll_{c}_armor_blessed"] = armorScroll_Bless.Prefab;
           
@@ -471,7 +505,7 @@ public static class ScrollItems
             firsttime.Add(__instance.m_elementPrefab);
             Transform transform = __instance.m_elementPrefab.transform;
             GameObject newIcon = Object.Instantiate(CombineOutline);
-            newIcon!.transform.SetParent(transform);
+            newIcon!.transform.SetParent(transform, false);
             newIcon.name = "VES_Combine";
             newIcon.GetComponent<RectTransform>().anchoredPosition = new Vector2(0, 0);
             newIcon.gameObject.SetActive(false);
@@ -596,12 +630,12 @@ public static class ScrollItems
                 FixDropPrefab(item);
                 if (item.m_dropPrefab == null || !UpgradeScrollHashset.Contains(item.m_dropPrefab.name)) continue;
 
-                switch (RequiredLine_Config.Value)
+                switch (RequiredShape_Config.Value)
                 {
-                    case RequiredLine.Three:
+                    case RequiredShape.Row3:
                         if (!HaveSurrounds_3(item, __instance.m_inventory, out _)) continue;
                         break;
-                    case RequiredLine.Five:
+                    case RequiredShape.Cross5:
                         if (!HaveSurrounds_5(item, __instance.m_inventory, out _)) continue;
                         break;
                     default: continue;
@@ -609,8 +643,8 @@ public static class ScrollItems
                 InventoryGrid.Element element = __instance.m_elements[item.m_gridPos.y * __instance.m_inventory.m_width + item.m_gridPos.x];
                 Transform combine = element.m_go.transform.Find("VES_Combine");
                 combine.gameObject.SetActive(true);
-                combine.transform.GetChild(1).gameObject.SetActive(RequiredLine_Config.Value == RequiredLine.Three);
-                combine.transform.GetChild(2).gameObject.SetActive(RequiredLine_Config.Value == RequiredLine.Five);
+                combine.transform.GetChild(1).gameObject.SetActive(RequiredShape_Config.Value == RequiredShape.Row3);
+                combine.transform.GetChild(2).gameObject.SetActive(RequiredShape_Config.Value == RequiredShape.Cross5);
             }
         }
     }
@@ -639,12 +673,12 @@ public static class ScrollItems
             string dropPrefab = itemAt.m_dropPrefab.name;
             if (!UpgradeScrollHashset.Contains(dropPrefab)) return;
             int toInstantiate;
-            switch (RequiredLine_Config.Value)
+            switch (RequiredShape_Config.Value)
             {
-                case RequiredLine.Three:
+                case RequiredShape.Row3:
                     if (!HaveSurrounds_3(itemAt, __instance.m_inventory, out toInstantiate, true)) return;
                     break;
-                case RequiredLine.Five:
+                case RequiredShape.Cross5:
                     if (!HaveSurrounds_5(itemAt, __instance.m_inventory, out toInstantiate,  true)) return;
                     break;
                 default: return;
@@ -669,7 +703,7 @@ public static class ScrollItems
             if (!item.m_dropPrefab) return;
             string dropPrefab = item.m_dropPrefab.name;
             if (!UpgradeScrollHashset.Contains(dropPrefab)) return;
-            string shape = RequiredLine_Config.Value == RequiredLine.Three ? "<color=yellow><b>-</b></color>" : "<color=yellow><b>+</b></color>";
+            string shape = RequiredShape_Config.Value == RequiredShape.Row3 ? "<color=yellow><b>-</b></color>" : "<color=yellow><b>+</b></color>";
             __result += "\n\n$enchantment_putinlinetocombine".Localize(shape);
         }
     }
@@ -707,3 +741,5 @@ public static class ScrollItems
     }
 
 }
+
+

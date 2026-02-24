@@ -1,7 +1,7 @@
-﻿using System.Reflection.Emit;
+﻿﻿using System.Reflection.Emit;
 using System.Text.RegularExpressions;
 using ItemDataManager;
-using ItemManager;
+using kg.ValheimEnchantmentSystem.Managers.ItemManager;
 using JetBrains.Annotations;
 using kg.ValheimEnchantmentSystem.Configs;
 using kg.ValheimEnchantmentSystem.Misc;
@@ -72,7 +72,7 @@ public static class Enchantment_Core
             }
         }
 
-        public int GetEnchantmentChance()
+        public float GetEnchantmentChance()
         {
             return SyncedData.GetEnchantmentChance(this).success;
         }
@@ -102,7 +102,7 @@ public static class Enchantment_Core
 
         private bool CanEnchant()
         {
-            if (GetEnchantmentChance() <= 0) return false;
+            if (!SyncedData.IsLevelEnchantable(Item.m_dropPrefab.name, level, Item.IsWeapon())) return false;
             SyncedData.EnchantmentReqs reqs = SyncedData.GetReqs(Item.m_dropPrefab.name);
             return reqs != null;
         }
@@ -340,10 +340,11 @@ public static class Enchantment_Core
                 string color = SyncedData.GetColor(dropName, currentLevel, out _, true).IncreaseColorLight();
                 if (currentLevel == 0) color = "white";
 
-                int chance = SyncedData.GetEnchantmentChance(dropName, currentLevel, item.IsWeapon()).success;
-                if (chance > 0)
+                bool isEnchantable = SyncedData.IsLevelEnchantable(dropName, currentLevel, item.IsWeapon());
+                if (isEnchantable)
                 {
-                    __result += $"\n<color={color}>•</color> $enchantment_chance (<color={color}>{chance}%</color>)";
+                    float chance = SyncedData.GetEnchantmentChance(dropName, currentLevel, item.IsWeapon()).success;
+                    __result += $"\n<color={color}>•</color> $enchantment_chance (<color={color}>{chance.RoundOne()}%</color>)";
                     float additionalChance = SyncedData.GetAdditionalEnchantmentChance();
                     if (additionalChance > 0)
                     {

@@ -127,6 +127,11 @@ public sealed class CustomSyncedValue<T> : CustomSyncedValueBase
 internal class ConfigurationManagerAttributes
 {
 	[UsedImplicitly] public bool? ReadOnly = false;
+	[UsedImplicitly] public int? Order;
+	[UsedImplicitly] public bool? Browsable;
+	[UsedImplicitly] public string? Category;
+	[UsedImplicitly] public Action<ConfigEntryBase>? CustomDrawer;
+	public Func<bool>? browsability;
 }
 
 [PublicAPI]
@@ -144,7 +149,7 @@ public class ConfigSync
 
 	public bool IsLocked
 	{
-		get => (forceConfigLocking ?? lockedConfig != null && ((IConvertible)lockedConfig.BaseConfig.BoxedValue).ToInt32(CultureInfo.InvariantCulture) != 0) && !lockExempt;
+		get => forceConfigLocking ?? lockedConfig != null && ((IConvertible)lockedConfig.BaseConfig.BoxedValue).ToInt32(CultureInfo.InvariantCulture) != 0;
 		set => forceConfigLocking = value;
 	}
 
@@ -397,15 +402,9 @@ public class ConfigSync
 	{
 		try
 		{
-			if (isServer && IsLocked && SnatchCurrentlyHandlingRPC.currentRpc?.GetSocket()?.GetHostName() is { } client)
+			if (isServer && IsLocked)
 			{
-				MethodInfo? listContainsId = AccessTools.DeclaredMethod(typeof(ZNet), "ListContainsId");
-				SyncedList adminList = (SyncedList)AccessTools.DeclaredField(typeof(ZNet), "m_adminList").GetValue(ZNet.instance);
-				bool exempt = listContainsId is null ? adminList.Contains(client) : (bool)listContainsId.Invoke(ZNet.instance, new object[] { adminList, client });
-				if (!exempt)
-				{
-					return false;
-				}
+				return false;
 			}
 
 			cacheExpirations.RemoveAll(kv =>
@@ -633,7 +632,7 @@ public class ConfigSync
 			return true;
 		}
 
-		return configSync.IsSourceOfTruth || !config.SynchronizedConfig || config.LocalBaseValue == null || (!configSync.IsLocked && (config != configSync.lockedConfig || lockExempt));
+		return configSync.IsSourceOfTruth || !config.SynchronizedConfig || config.LocalBaseValue == null || (!configSync.IsLocked && config != configSync.lockedConfig);
 	}
 
 	private void serverLockedSettingChanged()

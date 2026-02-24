@@ -120,7 +120,6 @@ public class Localizer
 
     private static void LoadLocalization(Localization __instance, string language)
     {
-        if (__instance == null) return;
         if (!localizationLanguage.Remove(__instance))
         {
             localizationObjects.Add(new WeakReference<Localization>(__instance));
@@ -129,36 +128,42 @@ public class Localizer
         localizationLanguage.Add(__instance, language);
 
         Dictionary<string, string> localizationFiles = new();
-        string guid = plugin.Info.Metadata.GUID;
-        foreach (string file in Directory.GetFiles(Path.GetDirectoryName(Paths.PluginPath)!, $"{guid}.*", SearchOption.AllDirectories).Where(f => fileExtensions.IndexOf(Path.GetExtension(f)) >= 0))
+        string pluginGuid = plugin.Info.Metadata.GUID;
+        string pluginName = plugin.Info.Metadata.Name;
+        string pluginsRoot = Path.GetDirectoryName(Paths.PluginPath)!;
+        foreach (string filePrefix in new[] { pluginGuid, pluginName })
         {
-            string fileName = Path.GetFileNameWithoutExtension(file);
-            if (!fileName.StartsWith($"{guid}."))
+            foreach (string file in Directory.GetFiles(pluginsRoot, $"{filePrefix}.*", SearchOption.AllDirectories).Where(f => fileExtensions.IndexOf(Path.GetExtension(f)) >= 0))
             {
-                continue;
-            }
+                string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(file);
+                int lastDot = fileNameWithoutExtension.LastIndexOf('.');
+                if (lastDot <= 0 || lastDot == fileNameWithoutExtension.Length - 1)
+                {
+                    continue;
+                }
 
-            string key = fileName.Substring($"{guid}.".Length);
-            if (localizationFiles.ContainsKey(key))
-            {
-                // Handle duplicate key
-                Debug.LogWarning($"Duplicate key {key} found for {guid}. The duplicate file found at {file} will be skipped.");
-            }
-            else
-            {
-                localizationFiles[key] = file;
+                string key = fileNameWithoutExtension.Substring(lastDot + 1);
+                if (localizationFiles.ContainsKey(key))
+                {
+                    // Handle duplicate key
+                    Debug.LogWarning($"Duplicate key {key} found for {plugin.Info.Metadata.Name}. The duplicate file found at {file} will be skipped.");
+                }
+                else
+                {
+                    localizationFiles[key] = file;
+                }
             }
         }
 
         if (LoadTranslationFromAssembly("English") is not { } englishAssemblyData)
         {
-            throw new Exception($"Found no English localizations in mod {guid}. Expected an embedded resource translations/{guid}.English.json or translations/{guid}.English.yml.");
+            throw new Exception($"Found no English localizations in mod {plugin.Info.Metadata.Name}. Expected an embedded resource translations/{plugin.Info.Metadata.GUID}.English.json, translations/{plugin.Info.Metadata.GUID}.English.yml, translations/English.json, or translations/English.yml.");
         }
 
         Dictionary<string, string>? localizationTexts = new DeserializerBuilder().IgnoreFields().Build().Deserialize<Dictionary<string, string>?>(Encoding.UTF8.GetString(englishAssemblyData));
         if (localizationTexts is null)
         {
-            throw new Exception($"Localization for mod {guid} failed: Localization file was empty.");
+            throw new Exception($"Localization for mod {plugin.Info.Metadata.Name} failed: Localization file was empty.");
         }
 
         string? localizationData = null;
@@ -204,9 +209,15 @@ public class Localizer
 
     private static byte[]? LoadTranslationFromAssembly(string language)
     {
+        string pluginGuid = plugin.Info.Metadata.GUID;
         foreach (string extension in fileExtensions)
         {
-            if (ReadEmbeddedFileBytes("translations." + plugin.Info.Metadata.GUID + "." + language + extension) is { } data)
+            if (ReadEmbeddedFileBytes($"translations.{pluginGuid}.{language}{extension}") is { } guidData)
+            {
+                return guidData;
+            }
+
+            if (ReadEmbeddedFileBytes("translations." + language + extension) is { } data)
             {
                 return data;
             }

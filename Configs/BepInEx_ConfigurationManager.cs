@@ -11,6 +11,14 @@ public static class BepInEx_ConfigurationManager
     [UsedImplicitly]
     private static void OnInit()
     {
+        // Add a safe-mode toggle to avoid interfering with other mods' ConfigurationManager UI
+        var safeMode = ValheimEnchantmentSystem.ClientConfig(
+            "Compatibility",
+            "ConfigurationManager - Safe Mode",
+            true,
+            "When enabled, VES will not patch ConfigurationManager internals to avoid any potential conflicts with other mods. Disable only if you need legacy integration.");
+        if (safeMode.Value) return;
+
         Type find = Type.GetType("ConfigurationManager.SettingSearcher, ConfigurationManager");
         if (find == null) return;
         MethodInfo method = AccessTools.Method(find, "GetPluginConfig");

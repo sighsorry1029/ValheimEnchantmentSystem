@@ -46,15 +46,16 @@
         <Compile Include="Enchantment_Skill.cs" />
         <Compile Include="Enchantment_VFX.cs" />
         <Compile Include="GlobalUsings.cs" />
-        <Compile Include="Items_Structures\ScrollItems.cs" />
-        <Compile Include="Items_Structures\BuildPieces.cs" />
         <Compile Include="Managers\AnimationSpeedManager.cs" />
+        <Compile Include="Managers\ItemDataManager.cs" />
         <Compile Include="Managers\LocalizationManager.cs" />
+        <Compile Include="Managers\PieceManager.cs" />
         <Compile Include="Misc\Attributes.cs" />
         <Compile Include="Misc\Convertions.cs" />
         <Compile Include="Misc\DiscordWebhook.cs" />
         <Compile Include="Misc\External_AsmLoad.cs" />
         <Compile Include="Other_Mods_APIs.cs" />
+        <Compile Include="ScrollItems.cs" />
         <Compile Include="StatsPanel.cs" />
         <Compile Include="UI\InfoUI.cs" />
         <Compile Include="UI\MainUI.cs" />
@@ -63,7 +64,7 @@
         <Compile Include="Utils\TerminalCommands.cs" />
         <Compile Include="Utils\Utils.cs" />
         <Compile Include="ValheimEnchantmentSystem.cs" />
-        <Compile Include="Properties\AssemblyInfo.cs"/>
+        <Compile Include="Properties\AssemblyInfo.cs" />
         <Compile Include="Managers\ServerSync.cs" />
         <Compile Include="Managers\ItemManager.cs" />
         <Compile Include="Managers\SkillManager.cs" />
@@ -241,7 +242,7 @@
         <HintPath>Libs\0Harmony.dll</HintPath>
       </Reference>
       <Reference Include="Assembly-CSharp">
-        <HintPath>..\..\..\..\Program Files (x86)\Steam\steamapps\common\Valheim\valheim_Data\Managed\publicized_assemblies\Assembly-CSharp_publicized.dll</HintPath>
+        <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Valheim\valheim_Data\Managed\publicized_assemblies\Assembly-CSharp_publicized.dll</HintPath>
       </Reference>
       <Reference Include="assembly_googleanalytics">
         <HintPath>..\..\..\..\Program Files (x86)\Steam\steamapps\common\Valheim\valheim_Data\Managed\publicized_assemblies\assembly_googleanalytics_publicized.dll</HintPath>
@@ -273,11 +274,11 @@
       <Reference Include="fastJSON">
         <HintPath>Libs\fastJSON.dll</HintPath>
       </Reference>
-      <Reference Include="ItemDataManager">
-        <HintPath>Libs\ItemDataManager.dll</HintPath>
-      </Reference>
       <Reference Include="Jewelcrafting">
         <HintPath>Libs\JewelcraftingAPI.dll</HintPath>
+      </Reference>
+      <Reference Include="SoftReferenceableAssets">
+        <HintPath>..\..\..\..\Program Files (x86)\Steam\steamapps\common\Valheim\valheim_Data\Managed\publicized_assemblies\SoftReferenceableAssets_publicized.dll</HintPath>
       </Reference>
       <Reference Include="System" />
       <Reference Include="Unity.TextMeshPro">

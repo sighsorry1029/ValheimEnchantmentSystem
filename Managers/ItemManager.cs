@@ -14,7 +14,8 @@ using HarmonyLib;
 using JetBrains.Annotations;
 using UnityEngine;
 
-namespace ItemManager;
+using kg.ValheimEnchantmentSystem;
+namespace kg.ValheimEnchantmentSystem.Managers.ItemManager;
 
 [PublicAPI]
 public enum CraftingTable
@@ -202,6 +203,7 @@ public class Item
 	private TraderConfig? traderConfig;
 
 	public readonly GameObject Prefab;
+	internal readonly BaseUnityPlugin? ownerPlugin;
 
 	[Description("Specifies the resources needed to craft the item.\nUse .Add to add resources with their internal ID and an amount.\nUse one .Add for each resource type the item should need.")]
 	public RequiredResourceList RequiredItems => this[""].RequiredItems;
@@ -330,6 +332,7 @@ public class Item
 			PrefabManager.RegisterPrefab(prefab, true);
 		}
 		Prefab = prefab;
+		ownerPlugin = plugin;
 		registeredItems.Add(this);
 		itemDropMap[Prefab.GetComponent<ItemDrop>()] = this;
 		Prefab.GetComponent<ItemDrop>().m_itemData.m_dropPrefab = Prefab;
@@ -464,11 +467,11 @@ public class Item
 			bool SaveOnConfigSet = plugin.Config.SaveOnConfigSet;
 			plugin.Config.SaveOnConfigSet = false;
 
-			foreach (Item item in registeredItems.Where(i => i.configurability != Configurability.Disabled))
+			foreach (Item item in registeredItems.Where(i => i.configurability != Configurability.Disabled && i.ownerPlugin == plugin))
 			{
 				if (item.Prefab == null || item.Prefab.GetComponent<ItemDrop>() == null) continue;
 				string nameKey = item.Prefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_name;
-				string englishName = new Regex(@"[=\n\t\\""\'\[\]]*").Replace(english.Localize(nameKey), "").Trim();
+				string englishName = english.Localize(nameKey).Trim();
 				string localizedName = Localization.instance.Localize(nameKey).Trim();
 
 				int order = 0;
@@ -621,7 +624,7 @@ public class Item
 								{
 									foreach (Smelter instantiatedSmelter in Resources.FindObjectsOfTypeAll<Smelter>())
 									{
-										if (Utils.GetPrefabName(instantiatedSmelter.gameObject) == activePiece)
+          if (global::Utils.GetPrefabName(instantiatedSmelter.gameObject) == activePiece)
 										{
 											instantiatedSmelter.m_conversion.RemoveAt(removeIndex);
 										}
@@ -636,7 +639,7 @@ public class Item
 									conversion.config.activePiece = newPieceName;
 									foreach (Smelter instantiatedSmelter in Resources.FindObjectsOfTypeAll<Smelter>())
 									{
-										if (Utils.GetPrefabName(instantiatedSmelter.gameObject) == newPieceName)
+          if (global::Utils.GetPrefabName(instantiatedSmelter.gameObject) == newPieceName)
 										{
 											instantiatedSmelter.m_conversion.Add(item.conversions[index]);
 										}
@@ -1073,7 +1076,7 @@ public class Item
 
 	internal static void Patch_TraderGetAvailableItems(global::Trader __instance, ref List<global::Trader.TradeItem> __result)
 	{
-		Trader trader = Utils.GetPrefabName(__instance.gameObject) switch
+  Trader trader = global::Utils.GetPrefabName(__instance.gameObject) switch
 		{
 			"Haldor" => Trader.Haldor,
 			"Hildir" => Trader.Hildir,
@@ -1101,7 +1104,7 @@ public class Item
 			}
 			else if (Player.m_localPlayer.GetCurrentCraftingStation() is { } currentCraftingStation)
 			{
-				string stationName = Utils.GetPrefabName(currentCraftingStation.gameObject);
+    string stationName = global::Utils.GetPrefabName(currentCraftingStation.gameObject);
 				configs = itemConfigs.Where(c => c.Value.table.Value switch
 				{
 					CraftingTable.Inventory or CraftingTable.Disabled => false,
@@ -1777,7 +1780,27 @@ public class Item
 	private static bool hasConfigSync = true;
 	private static object? _configSync;
 
-    private static object? configSync => kg.ValheimEnchantmentSystem.ValheimEnchantmentSystem.ConfigSync;
+	private static object? configSync
+	{
+		get
+		{
+			if (_configSync == null && hasConfigSync)
+			{
+				if (Assembly.GetExecutingAssembly().GetType("ServerSync.ConfigSync") is { } configSyncType)
+				{
+					_configSync = Activator.CreateInstance(configSyncType, plugin.Info.Metadata.GUID + " ItemManager");
+					configSyncType.GetField("CurrentVersion").SetValue(_configSync, plugin.Info.Metadata.Version.ToString());
+					configSyncType.GetProperty("IsLocked")!.SetValue(_configSync, true);
+				}
+				else
+				{
+					hasConfigSync = false;
+				}
+			}
+
+			return _configSync;
+		}
+	}
 
 	private static ConfigEntry<T> config<T>(string group, string name, T value, ConfigDescription description)
 	{

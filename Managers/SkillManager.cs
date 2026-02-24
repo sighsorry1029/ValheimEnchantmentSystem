@@ -10,7 +10,7 @@ using HarmonyLib;
 using JetBrains.Annotations;
 using UnityEngine;
 
-namespace SkillManager;
+namespace kg.ValheimEnchantmentSystem.Managers.SkillManager;
 
 [PublicAPI]
 public class Skill

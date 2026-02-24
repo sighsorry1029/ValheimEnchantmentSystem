@@ -1,10 +1,11 @@
 using BepInEx.Bootstrap;
 using BepInEx.Configuration;
 using ItemDataManager;
-using ItemManager;
+using kg.ValheimEnchantmentSystem.Managers.ItemManager;
 using JetBrains.Annotations;
 using kg.ValheimEnchantmentSystem.Configs;
 using kg.ValheimEnchantmentSystem.Misc;
+using kg.ValheimEnchantmentSystem;
 using UnityEngine.Audio;
 using YamlDotNet.Core.Tokens;
 
@@ -453,7 +454,7 @@ public static class VES_UI
         }
 
         Enchantment_Core.Enchanted en = item.Data().Get<Enchantment_Core.Enchanted>();
-        if (en && en!.GetEnchantmentChance() <= 0) return;
+        if (en && !SyncedData.IsLevelEnchantable(item.m_dropPrefab.name, en.level, item.IsWeapon())) return;
 
         _currentItem = item;
 
@@ -607,7 +608,8 @@ public static class VES_UI
         {
             if (__instance.m_repairPanel.gameObject != __instance.m_repairButton.gameObject)
             {
-                _enchantmentBackground = UnityEngine.Object.Instantiate(__instance.m_repairPanel.gameObject, __instance.m_repairPanel.transform.parent);
+                _enchantmentBackground = UnityEngine.Object.Instantiate(__instance.m_repairPanel.gameObject);
+                _enchantmentBackground.transform.SetParent(__instance.m_repairPanel.transform.parent, false);
                 RectTransform rectTransform = _enchantmentBackground.GetComponent<RectTransform>();
                 rectTransform.anchoredPosition += new Vector2(0, 74);
                 _enchantmentBackground.transform.SetAsFirstSibling();
@@ -617,7 +619,8 @@ public static class VES_UI
                 _enchantmentBackground = new();
             }
             
-            _enchantmentButton = UnityEngine.Object.Instantiate(__instance.m_repairButton.gameObject, __instance.m_repairButton.transform.parent).GetComponent<Button>();
+            _enchantmentButton = UnityEngine.Object.Instantiate(__instance.m_repairButton.gameObject).GetComponent<Button>();
+            _enchantmentButton.transform.SetParent(__instance.m_repairButton.transform.parent, false);
             _enchantmentButton.name = "enchantment_menu";
             _enchantmentButton.onClick.RemoveAllListeners();
             _enchantmentButton.onClick.AddListener(() =>

@@ -1,6 +1,7 @@
 ﻿using JetBrains.Annotations;
 using kg.ValheimEnchantmentSystem.Configs;
 using kg.ValheimEnchantmentSystem.Misc;
+using kg.ValheimEnchantmentSystem;
 
 namespace kg.ValheimEnchantmentSystem.UI;
 
@@ -158,7 +159,7 @@ public static class Info_UI
             result += stat.Value.Info_Description();
         }
 
-        return result.Localize();
+        return result.Localize().Trim();
     }
 
     private static string GenerateChancesText(Dictionary<int, SyncedData.Chance_Data> chances)
@@ -166,11 +167,12 @@ public static class Info_UI
         string result = "";
         foreach (KeyValuePair<int, SyncedData.Chance_Data> chance in chances.OrderBy(x => x.Key))
         {
-            string success = $"{chance.Value.success}";
-            string destroy = chance.Value.destroy > 0 ? $", $enchantment_destroychance: {chance.Value.destroy}%".Localize() : "";
+            if (chance.Value.success < 0 || chance.Value.destroy < 0) continue;
+            string success = $"{chance.Value.success.RoundOne()}";
+            string destroy = chance.Value.destroy > 0 ? $", $enchantment_destroychance: {chance.Value.destroy.RoundOne()}%".Localize() : "";
             result += $"<color=yellow>• lvl{chance.Key}:</color> {success}%{destroy}\n";
         }
-        return result;
+        return result.Trim();
     }
 
     private static GameObject CreateElementWithText(IEnumerable<string> prefabs, string text, string found,
@@ -275,9 +277,11 @@ public static class Info_UI
         {
             string found = null;
             if (!string.IsNullOrWhiteSpace(_search.text) && !HasAny(stat.Items, _search.text, out found)) continue;
-            GameObject element = CreateElementWithText(stat.Items, GenerateStatsText(stat.Stats), found);
+            string text = GenerateStatsText(stat.Stats);
+            if (string.IsNullOrEmpty(text)) continue;
+            GameObject element = CreateElementWithText(stat.Items, text, found);
             if (element) _fittersUpdate.Add(element);
-        } 
+        }
         ForceCanvas();
         _fittersUpdate.ForEach(x => x.transform.Find("Info").gameObject.SetActive(false));
     }
@@ -300,7 +304,9 @@ public static class Info_UI
         {
             string found = null;
             if (!string.IsNullOrWhiteSpace(_search.text) && !HasAny(chance.Items, _search.text, out found)) continue;
-            GameObject element = CreateElementWithText(chance.Items, GenerateChancesText(chance.Chances), found);
+            string text = GenerateChancesText(chance.Chances);
+            if (string.IsNullOrEmpty(text)) continue;
+            GameObject element = CreateElementWithText(chance.Items, text, found);
             if (element) _fittersUpdate.Add(element);
         }
         ForceCanvas();

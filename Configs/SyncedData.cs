@@ -1,4 +1,4 @@
-﻿using System.Text;
+﻿﻿using System.Text;
 using JetBrains.Annotations;
 using kg.ValheimEnchantmentSystem.Misc;
 using ServerSync;
@@ -11,6 +11,7 @@ namespace kg.ValheimEnchantmentSystem.Configs;
 public static class SyncedData
 {
     private static FileSystemWatcher FSW;
+    private static FileSystemWatcher FSW_Config;
     private static string YAML_Chances_Weapons;
     private static string YAML_Chances_Armor;
     private static string YAML_Stats_Weapons;
@@ -130,6 +131,19 @@ public static class SyncedData
             SynchronizingObject = ThreadingHelper.SynchronizingObject
         };
         FSW.Changed += ConfigChanged;
+
+        string? configDir = Path.GetDirectoryName(ValheimEnchantmentSystem._thistype.Config.ConfigFilePath);
+        if (!string.IsNullOrWhiteSpace(configDir))
+        {
+            FSW_Config = new FileSystemWatcher(configDir)
+            {
+                EnableRaisingEvents = true,
+                IncludeSubdirectories = false,
+                NotifyFilter = NotifyFilters.LastWrite,
+                SynchronizingObject = ThreadingHelper.SynchronizingObject
+            };
+            FSW_Config.Changed += ConfigChanged;
+        }
     }
     private static void OptimizeChances()
     {
@@ -388,6 +402,20 @@ public static class SyncedData
         return target.TryGetValue(level, out Chance_Data chance) ? chance : new Chance_Data() { success = 0 };
     }
 
+    public static bool IsLevelEnchantable(string dropPrefab, int level, bool isWeapon)
+    {
+        if (dropPrefab != null && OPTIMIZED_Overrides_EnchantmentChances.TryGetValue(dropPrefab, out Dictionary<int, Chance_Data> overriden))
+        {
+            if (overriden.TryGetValue(level, out Chance_Data overrideChance))
+                return overrideChance.success >= 0 && overrideChance.destroy >= 0;
+        }
+
+        Dictionary<int, Chance_Data> target = isWeapon ? Synced_EnchantmentChances_Weapons.Value : Synced_EnchantmentChances_Armor.Value;
+        if (target.TryGetValue(level, out Chance_Data chance))
+            return chance.success >= 0 && chance.destroy >= 0;
+        return false;
+    }
+
     public static Stat_Data GetStatIncrease(Enchantment_Core.Enchanted en)
     {
         if (en.level == 0) return null;
@@ -589,8 +617,8 @@ public static class SyncedData
     [AutoSerialize]
     public class Chance_Data : ImplicitBool, ISerializableParameter
     {
-        [SerializeField] public int success;
-        [SerializeField] public int destroy;
+        [SerializeField] public float success;
+        [SerializeField] public float destroy;
         public void Serialize  (ref ZPackage pkg) => throw new NotImplementedException();
         public void Deserialize(ref ZPackage pkg) => throw new NotImplementedException();
     }

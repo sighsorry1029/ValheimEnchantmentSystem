@@ -1,4 +1,4 @@
-﻿using ItemManager;
+﻿using kg.ValheimEnchantmentSystem.Managers.ItemManager;
 using JetBrains.Annotations;
 
 namespace kg.ValheimEnchantmentSystem.Misc;

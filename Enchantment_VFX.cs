@@ -464,7 +464,7 @@ public static class Enchantment_VFX
             firsttime.Add(__instance.m_elementPrefab);
             Transform transform = __instance.m_elementPrefab.transform;
             GameObject newIcon = Object.Instantiate(HOTBAR_PART);
-            newIcon!.transform.SetParent(transform);
+            newIcon!.transform.SetParent(transform, false);
             newIcon.name = "VES_Level";
             newIcon.GetComponent<RectTransform>().anchoredPosition = new Vector2(0, 0);
             newIcon.gameObject.SetActive(false);
@@ -485,7 +485,7 @@ public static class Enchantment_VFX
             if (!bar) return;
             Transform transform = bar.m_elementPrefab.transform;
             GameObject newIcon = Object.Instantiate(HOTBAR_PART);
-            newIcon!.transform.SetParent(transform);
+            newIcon!.transform.SetParent(transform, false);
             newIcon.name = "VES_Level";
             newIcon.GetComponent<RectTransform>().anchoredPosition = new Vector2(0, 0);
             newIcon.gameObject.SetActive(false);

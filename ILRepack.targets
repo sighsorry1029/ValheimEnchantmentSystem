@@ -5,7 +5,6 @@
 			<InputAssemblies Include="$(TargetPath)"/>
 			<InputAssemblies Include="$(OutputPath)\fastJSON.dll" />
 			<InputAssemblies Include="$(OutputPath)\YamlDotNet.dll" />
-			<InputAssemblies Include="$(OutputPath)\ItemDataManager.dll" />
 			<InputAssemblies Include="$(OutputPath)\JewelcraftingAPI.dll" />
 		</ItemGroup>
 		<ILRepack Parallel="true" DebugInfo="true" Internalize="false" InputAssemblies="@(InputAssemblies)" OutputFile="$(TargetPath)"
