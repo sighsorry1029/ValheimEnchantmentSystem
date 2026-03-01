@@ -1,7 +1,7 @@
 using BepInEx.Bootstrap;
 using BepInEx.Configuration;
 using ItemDataManager;
-using kg.ValheimEnchantmentSystem.Managers.ItemManager;
+using ItemManager;
 using JetBrains.Annotations;
 using kg.ValheimEnchantmentSystem.Configs;
 using kg.ValheimEnchantmentSystem.Misc;
@@ -76,9 +76,9 @@ public static class VES_UI
     private static void OnInit()
     {
         if (ValheimEnchantmentSystem.NoGraphics) return;
-        _enchantmentAnimationDuration = ValheimEnchantmentSystem._thistype.Config.Bind(
-            "Client",
-            "Visuals - EnchantmentAnimationDuration",
+        _enchantmentAnimationDuration = ValheimEnchantmentSystem.ClientConfig(
+            "",
+            "EnchantmentAnimationDuration",
             1,
             new ConfigDescription("Duration of the enchantment animation (1-5 seconds).", new AcceptableValueRange<int>(1, 5)));
         _1sec = ValheimEnchantmentSystem._asset.LoadAsset<AudioClip>("kg_EnchantmentSound_Main_1");
@@ -193,7 +193,9 @@ public static class VES_UI
             Progress_Transform.gameObject.SetActive(true);
             Progress_Fill.fillAmount = 0f;
             Progress_VFX.GetComponent<RectTransform>().anchoredPosition = new Vector2(0f, 0f);
-            Progress_VFX.GetComponent<ParticleSystem>().startColor = _useBless ? VFX_Default_Bless : Color.white;
+            ParticleSystem progressVfx = Progress_VFX.GetComponent<ParticleSystem>();
+            ParticleSystem.MainModule progressVfxMain = progressVfx.main;
+            progressVfxMain.startColor = _useBless ? VFX_Default_Bless : Color.white;
             Progress_Fill.transform.GetChild(0).GetComponent<Image>().color = _useBless ? Color.yellow : Color.white;
             Item_Visual.color = Color.clear;
             Scroll_Visual.color = Color.clear;
@@ -301,7 +303,9 @@ public static class VES_UI
             Color c = SyncedData.GetColor(en, out _, true).IncreaseColorLight().ToColorAlpha();
             Item_Trail.color = c;
             GameObject uifx = UnityEngine.Object.Instantiate(VFX1, Item_Transform.transform);
-            uifx.GetComponent<ParticleSystem>().startColor = enchanted ? Color.green : Color.red;
+            ParticleSystem uiFxParticle = uifx.GetComponent<ParticleSystem>();
+            ParticleSystem.MainModule uiFxMain = uiFxParticle.main;
+            uiFxMain.startColor = enchanted ? Color.green : Color.red;
             AUsrc.PlayOneShot(enchanted ? SuccessSound : FailSound);
             Item_Trail.material.SetFloat(Speed, 0.5f);
             Scroll_Trail.material.SetFloat(Speed, 0.5f);
@@ -383,7 +387,9 @@ public static class VES_UI
         Progress_VFX.GetComponent<RectTransform>().anchoredPosition = new Vector2(0f, 0f);
         Progress_Fill.fillAmount = 0f;
         Progress_Fill.transform.GetChild(0).GetComponent<Image>().color = Color.clear;
-        Progress_VFX.GetComponent<ParticleSystem>().startColor = Color.clear;
+        ParticleSystem defaultProgressVfx = Progress_VFX.GetComponent<ParticleSystem>();
+        ParticleSystem.MainModule defaultProgressVfxMain = defaultProgressVfx.main;
+        defaultProgressVfxMain.startColor = Color.clear;
         
         Chance_Transform.gameObject.SetActive(false);
     }

@@ -26,6 +26,19 @@ public static class SyncedData
     
 
     private static readonly Dictionary<string, Action> FSW_Mapper = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, DateTime> LastConfigChanges = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly TimeSpan ConfigReloadDebounce = TimeSpan.FromMilliseconds(750);
+    private const int EnableVfxArmorOrder = 101;
+
+    private class ConfigurationManagerAttributes
+    {
+        [UsedImplicitly] public int? Order;
+    }
+
+    private static ConfigDescription OrderedDescription(string description, int order) => new(
+        description,
+        null,
+        new ConfigurationManagerAttributes { Order = order });
     
     [UsedImplicitly]
     private static void OnInit()
@@ -38,7 +51,7 @@ public static class SyncedData
         BlessedScrollsAdditionalChance = ValheimEnchantmentSystem.config("Enchantment", "BlessedScrollsAdditionalChance", 25, "Enchanting chance added when using blessed enchant scrolls if the option to prevent breaking of an item in case of failed enchant is set to false.");
         AllowJewelcraftingMirrorCopyEnchant = ValheimEnchantmentSystem.config("Enchantment", "AllowJewelcraftingMirrorCopyEnchant", false, "Allow jewelcrafting to copy enchantment from one item to another using mirror.");
         AdditionalEnchantmentChancePerLevel = ValheimEnchantmentSystem.config("Enchantment", "AdditionalEnchantmentChancePerLevel", 0.07f, "Additional enchantment chance per level of Enchantment skill.");
-        AllowVFXArmor = ValheimEnchantmentSystem.config("Enchantment", "AllowVFXArmor", false, "Allow VFX on armor.");
+        AllowVFXArmor = ValheimEnchantmentSystem.ClientConfig("", "EnableVFXArmor", false, OrderedDescription("Allow VFX on armor.", EnableVfxArmorOrder));
         EnchantmentEnableNotifications = ValheimEnchantmentSystem.config("Notifications", "EnchantmentEnableNotifications", true, "Enable enchantment notifications.");
         EnchantmentNotificationMinLevel = ValheimEnchantmentSystem.config("Notifications", "EnchantmentNotificationMinLevel", 6, "The minimum level of enchantment to show notification.");
 
@@ -127,10 +140,13 @@ public static class SyncedData
         {
             EnableRaisingEvents = true,
             IncludeSubdirectories = true,
-            NotifyFilter = NotifyFilters.LastWrite,
+            NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.CreationTime | NotifyFilters.Size,
             SynchronizingObject = ThreadingHelper.SynchronizingObject
         };
         FSW.Changed += ConfigChanged;
+        FSW.Created += ConfigChanged;
+        FSW.Deleted += ConfigChanged;
+        FSW.Renamed += ConfigRenamed;
 
         string? configDir = Path.GetDirectoryName(ValheimEnchantmentSystem._thistype.Config.ConfigFilePath);
         if (!string.IsNullOrWhiteSpace(configDir))
@@ -139,10 +155,13 @@ public static class SyncedData
             {
                 EnableRaisingEvents = true,
                 IncludeSubdirectories = false,
-                NotifyFilter = NotifyFilters.LastWrite,
+                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.CreationTime | NotifyFilters.Size,
                 SynchronizingObject = ThreadingHelper.SynchronizingObject
             };
             FSW_Config.Changed += ConfigChanged;
+            FSW_Config.Created += ConfigChanged;
+            FSW_Config.Deleted += ConfigChanged;
+            FSW_Config.Renamed += ConfigRenamed;
         }
     }
     private static void OptimizeChances()
@@ -186,11 +205,10 @@ public static class SyncedData
             if (string.IsNullOrWhiteSpace(text)) return Enumerable.Empty<EnchantmentReqs>();
 
             var deserializer = new DeserializerBuilder().Build();
-            if (LooksLikeListFormat(text))
+            if (!HasYamlCompatibleListIndentation(text))
             {
-                List<EnchantmentReqs> list = deserializer.Deserialize<List<EnchantmentReqs>>(text) ?? new();
-                NormalizeReqAmounts(list);
-                return list;
+                Utils.print($"Invalid reqs indentation in {path}. Use spaces for list indentation and avoid tabs.", ConsoleColor.Red);
+                return Enumerable.Empty<EnchantmentReqs>();
             }
 
             Dictionary<string, List<string>> map = deserializer.Deserialize<Dictionary<string, List<string>>>(text) ?? new();
@@ -203,18 +221,32 @@ public static class SyncedData
         }
     }
 
-    private static bool LooksLikeListFormat(string text)
+    private static bool HasYamlCompatibleListIndentation(string text)
     {
         using StringReader reader = new StringReader(text);
-        string line;
+        string? line;
         while ((line = reader.ReadLine()) != null)
         {
             string trimmed = line.Trim();
             if (trimmed.Length == 0 || trimmed.StartsWith("#")) continue;
-            return trimmed.StartsWith("-");
+            if (!trimmed.StartsWith("-")) continue;
+
+            int dashIndex = line.IndexOf('-');
+            if (dashIndex < 0) continue;
+
+            string leading = line.Substring(0, dashIndex);
+            if (leading.Contains('\t'))
+            {
+                return false;
+            }
+
+            if (leading.Any(c => c != ' '))
+            {
+                return false;
+            }
         }
 
-        return false;
+        return true;
     }
 
     private static void NormalizeReqAmounts(IEnumerable<EnchantmentReqs> list)
@@ -315,44 +347,61 @@ public static class SyncedData
         Enchantment_VFX.UpdateGrid();
     }
 
-    private static DateTime LastConfigChange = DateTime.Now;
+    private static bool ShouldReloadMappedKey(string mappedKey)
+    {
+        DateTime now = DateTime.UtcNow;
+        if (LastConfigChanges.TryGetValue(mappedKey, out DateTime last) && now - last < ConfigReloadDebounce) return false;
+        LastConfigChanges[mappedKey] = now;
+        return true;
+    }
+
+    private static void InvokeReloadAction(string mappedKey, string changedPath, Action action)
+    {
+        if (!ShouldReloadMappedKey(mappedKey)) return;
+        try
+        {
+            Utils.print($"Reloading config {changedPath}");
+            action.Invoke();
+        }
+        catch (Exception ex)
+        {
+            Utils.print($"Error while reloading config {changedPath}: {ex}", ConsoleColor.Red);
+        }
+    }
+
+    private static void HandleConfigChangePath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return;
+
+        string extension = Path.GetExtension(path);
+        bool isTrackedFile = extension.Equals(".yml", StringComparison.OrdinalIgnoreCase) ||
+                             extension.Equals(".cfg", StringComparison.OrdinalIgnoreCase);
+
+        if (isTrackedFile && FSW_Mapper.TryGetValue(path, out Action fileAction))
+            InvokeReloadAction(path, path, fileAction);
+
+        string folder = Path.GetDirectoryName(path);
+        if (folder == null) return;
+        if (FSW_Mapper.TryGetValue(folder, out Action folderAction))
+            InvokeReloadAction(folder, path, folderAction);
+    }
+
+    private static bool CanProcessConfigEvent()
+    {
+        return Game.instance && ZNet.instance && ZNet.instance.IsServer();
+    }
+
     private static void ConfigChanged(object sender, FileSystemEventArgs e)
     {
-        if (!Game.instance || !ZNet.instance || !ZNet.instance.IsServer()) return;
-        if (e.ChangeType != WatcherChangeTypes.Changed) return;
-        string extention = Path.GetExtension(e.FullPath);
-        if (extention != ".yml" && extention != ".cfg") return;
-        if (FSW_Mapper.TryGetValue(e.FullPath, out Action action))
-        {
-            if (DateTime.Now - LastConfigChange < TimeSpan.FromSeconds(3)) return;
-            LastConfigChange = DateTime.Now;
-            try
-            {
-                Utils.print($"Reloading config {e.FullPath}");
-                action.Invoke();
-            } 
-            catch (Exception ex)
-            {
-                Utils.print($"Error while reloading config {e.FullPath}: {ex}", ConsoleColor.Red); 
-            }
-            return;
-        }
-        string folder = Path.GetDirectoryName(e.FullPath);
-        if (folder == null) return;
-        if (FSW_Mapper.TryGetValue(folder, out action))
-        {
-            if (DateTime.Now - LastConfigChange < TimeSpan.FromSeconds(3)) return;
-            LastConfigChange = DateTime.Now;
-            try
-            {
-                Utils.print($"Reloading config {e.FullPath}");
-                action.Invoke();
-            }
-            catch (Exception ex)
-            {
-                Utils.print($"Error while reloading config {e.FullPath}: {ex}", ConsoleColor.Red);
-            }
-        }
+        if (!CanProcessConfigEvent()) return;
+        HandleConfigChangePath(e.FullPath);
+    }
+
+    private static void ConfigRenamed(object sender, RenamedEventArgs e)
+    {
+        if (!CanProcessConfigEvent()) return;
+        HandleConfigChangePath(e.OldFullPath);
+        HandleConfigChangePath(e.FullPath);
     }
 
     public static string GetColor(Enchantment_Core.Enchanted en, out int variant, bool trimApha) =>

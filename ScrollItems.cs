@@ -1,9 +1,9 @@
-using kg.ValheimEnchantmentSystem.Managers.ItemManager;
+using ItemManager;
 using JetBrains.Annotations;
 using kg.ValheimEnchantmentSystem.Misc;
 using kg.ValheimEnchantmentSystem.UI;
 using System.ComponentModel;
-using kg.ValheimEnchantmentSystem.Managers.PieceManager;
+using PieceManager;
 using Object = UnityEngine.Object;
 using Random = UnityEngine.Random;
 
@@ -111,7 +111,17 @@ public static class ScrollItems
 
     private const int AllowCombineOrder = 1000;
     private const int RequiredLineOrder = 999;
-    
+
+    private class ConfigurationManagerAttributes
+    {
+        [UsedImplicitly] public int? Order;
+    }
+
+    private static ConfigDescription OrderedDescription(string description, int order) => new(
+        description,
+        null,
+        new ConfigurationManagerAttributes { Order = order });
+
     private static void FillRecipe(Item item, char tier, bool bless, bool isArmor)
     {
         Dictionary<char, RecipeData> targetDic;
@@ -131,18 +141,6 @@ public static class ScrollItems
         }
         item.Crafting.Add("kg_EnchantmentScrollStation", 1);
     }
-
-    private static void SetConfigOrder(ConfigEntryBase config, int order)
-    {
-        foreach (object tag in config.Description.Tags)
-        {
-            if (tag is ServerSync.ConfigurationManagerAttributes attrs)
-            {
-                attrs.Order = order;
-                return;
-            }
-        }
-    }
     
     [UsedImplicitly]
     private static void OnInit()
@@ -152,15 +150,24 @@ public static class ScrollItems
         var scrollStationComp = scrollStation.Prefab.GetComponent<Piece>();
         scrollStationComp.m_name = "$kg_enchantment_scrollstation";
         scrollStationComp.m_description = "$kg_enchantment_scrollstation_description";
-        scrollStation.Category.Set(kg.ValheimEnchantmentSystem.Managers.PieceManager.BuildPieceCategory.Crafting);
+        scrollStation.Category.Set(BuildPieceCategory.Crafting);
         scrollStation.Tool.Add("Hammer");
-        scrollStation.Crafting.Set(kg.ValheimEnchantmentSystem.Managers.PieceManager.CraftingTable.Workbench);
-        scrollStation.RequiredItems.Add("SurtlingCore", 3, true);
-        scrollStation.RequiredItems.Add("Stone", 30, false);
-        scrollStation.RequiredItems.Add("Flint", 20, false);
+        scrollStation.Crafting.Set(PieceManager.CraftingTable.Workbench);
+        scrollStation.RequiredItems.Add("SurtlingCore", 1, true);
+        scrollStation.RequiredItems.Add("BoneFragments", 5, true);
+        scrollStation.RequiredItems.Add("Flint", 10, true);
+        scrollStation.RequiredItems.Add("Stone", 20, true);
 
-        AllowScrollCombine = ValheimEnchantmentSystem.config("Scrolls", "Allow Combine", true, "Allow combining scrolls by arranging those in a certain shape and right-clicking the center.");
-        RequiredShape_Config = ValheimEnchantmentSystem.config("Scrolls", "Required Shape", RequiredShape.Cross5, "what shape of the same items is required to combine");
+        AllowScrollCombine = ValheimEnchantmentSystem.config(
+            "Scrolls",
+            "Allow Combine",
+            true,
+            OrderedDescription("Allow combining scrolls by arranging those in a certain shape and right-clicking the center.", AllowCombineOrder));
+        RequiredShape_Config = ValheimEnchantmentSystem.config(
+            "Scrolls",
+            "Required Shape",
+            RequiredShape.Cross5,
+            OrderedDescription("what shape of the same items is required to combine", RequiredLineOrder));
         CombineOutline = ValheimEnchantmentSystem._asset.LoadAsset<GameObject>("Enchantment_CombinePart");
         MonsterDroppingScrolls = ValheimEnchantmentSystem.config("Scrolls", "Drop From Monsters", true, "Allow monsters to drop scrolls.");
         MonsterDroppingSkilllScrolls = ValheimEnchantmentSystem.config("Skill Scrolls", "Drop From Monsters (Skill exp)", true, "Allow monsters to drop enchant skill exp scrolls.");
@@ -171,8 +178,6 @@ public static class ScrollItems
         DropChance_Skill = ValheimEnchantmentSystem.config("Skill Scrolls", "Drop Chance (Skill exp)", 0.20f, "Chance to drop from enemies.");
         DropChance_Skill_Bosses = ValheimEnchantmentSystem.config("Skill Scrolls", "Drop Chance (Skill exp) (Bosses)", 25f, "Chance to drop from bosses.");
         ExcludePrefabsFromDrop = ValheimEnchantmentSystem.config("Scrolls", "Exclude Prefabs From Drop", "TentaRoot", "Comma separated list of prefabs to exclude from dropping scrolls.");
-        SetConfigOrder(AllowScrollCombine, AllowCombineOrder);
-        SetConfigOrder(RequiredShape_Config, RequiredLineOrder);
         ExcludePrefabsFromDrop.SettingChanged += FillExclude;
         FillExclude();
         

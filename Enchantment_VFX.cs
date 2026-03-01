@@ -12,6 +12,7 @@ public static class Enchantment_VFX
 { 
     private static GameObject HOTBAR_PART;
     private static readonly int TintColor = Shader.PropertyToID("_TintColor");
+    private const int EnableMainVfxOrder = 100;
 
     private static GameObject VES_MPE;
     private static readonly List<float> INTENSITY = new List<float> { 220f, 80f, 1000f, 10f };
@@ -21,6 +22,16 @@ public static class Enchantment_VFX
     public static ConfigEntry<bool> _enableHotbarVisual;
     public static ConfigEntry<bool> _enableInventoryVisual;
     public static ConfigEntry<bool> _enableMainVFX;
+
+    private class ConfigurationManagerAttributes
+    {
+        [UsedImplicitly] public int? Order;
+    }
+
+    private static ConfigDescription OrderedDescription(string description, int order) => new(
+        description,
+        null,
+        new ConfigurationManagerAttributes { Order = order });
     
     [UsedImplicitly]
     private static void OnInit()
@@ -32,9 +43,9 @@ public static class Enchantment_VFX
         VFXs.Add(ValheimEnchantmentSystem._asset.LoadAsset<Material>("Enchantment_VFX_Mat4"));
         VES_MPE = ValheimEnchantmentSystem._asset.LoadAsset<GameObject>("VES_MPE");
         HOTBAR_PART = ValheimEnchantmentSystem._asset.LoadAsset<GameObject>("Enchantment_HotbarPart");
-        _enableHotbarVisual = ValheimEnchantmentSystem.ClientConfig("Visual", "EnableHotbarVisual", true, "Enable hotbar visual");
-        _enableInventoryVisual = ValheimEnchantmentSystem.ClientConfig("Visual", "EnableInventoryVisual", true, "Enable inventory visual");
-        _enableMainVFX = ValheimEnchantmentSystem.ClientConfig("Visual", "EnableMainVFX", true, "Enable main VFX");
+        _enableHotbarVisual = ValheimEnchantmentSystem.ClientConfig("", "EnableHotbarVisual", true, "Enable hotbar visual");
+        _enableInventoryVisual = ValheimEnchantmentSystem.ClientConfig("", "EnableInventoryVisual", true, "Enable inventory visual");
+        _enableMainVFX = ValheimEnchantmentSystem.ClientConfig("", "EnableMainVFX", false, OrderedDescription("Enable main VFX", EnableMainVfxOrder));
     }
 
     [HarmonyPatch(typeof(Humanoid), nameof(Humanoid.SetupVisEquipment))]

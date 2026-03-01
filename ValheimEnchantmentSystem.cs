@@ -1,4 +1,4 @@
-﻿using kg.ValheimEnchantmentSystem.Misc;
+﻿﻿using kg.ValheimEnchantmentSystem.Misc;
 using kg.ValheimEnchantmentSystem.UI;
 using LocalizationManager;
 using ServerSync;
@@ -14,24 +14,47 @@ namespace kg.ValheimEnchantmentSystem
     public class ValheimEnchantmentSystem : BaseUnityPlugin
     {
         private const string GUID = "kg.ValheimEnchantmentSystem";
-        private const string PLUGIN_NAME = "Valheim Enchantment System";
+        private const string PLUGIN_NAME = "ValheimEnchantmentSystem";
         private const string PLUGIN_VERSION = "1.8.4";
+        private static readonly string ConfigFileName = GUID + ".cfg";
+        private static readonly string ConfigFileFullPath = Path.Combine(Paths.ConfigPath, ConfigFileName);
+        private const int FailFastOnAutoloadOrder = -900000;
         
         public static ValheimEnchantmentSystem _thistype;
         public static AssetBundle _asset;
         public static readonly Harmony Harmony = new(GUID);
         public static readonly ConfigSync ConfigSync = new(GUID)
         {  
-            DisplayName = GUID, ModRequired = true,
-            MinimumRequiredVersion = PLUGIN_VERSION, CurrentVersion = PLUGIN_VERSION,
-            IsLocked = true   
+            DisplayName = PLUGIN_NAME,
+            ModRequired = true,
+            MinimumRequiredVersion = PLUGIN_VERSION,
+            CurrentVersion = PLUGIN_VERSION
         };
         public static string ConfigFolder;
+        private static ConfigEntry<Toggle> _serverConfigLocked = null!;
+        private static ConfigEntry<bool> _failFastOnAutoloadError = null!;
+        private FileSystemWatcher? _configWatcher;
+        private static readonly Dictionary<string, int> _nextOrderBySection = new(StringComparer.OrdinalIgnoreCase);
+
+        private class ConfigurationManagerAttributes
+        {
+            public int? Order;
+        }
+
+        private enum Toggle
+        {
+            On = 1,
+            Off = 0
+        }
+
         private enum WorkingAs { Client, Server }
         public static bool NoGraphics;
         
         private void Awake()
         { 
+            bool saveOnSet = Config.SaveOnConfigSet;
+            Config.SaveOnConfigSet = false;
+
             NoGraphics = SystemInfo.graphicsDeviceType == GraphicsDeviceType.Null;
             _thistype = this;
             WorkingAs WorkingAsType = SystemInfo.graphicsDeviceType == GraphicsDeviceType.Null ? WorkingAs.Server : WorkingAs.Client;
@@ -49,6 +72,17 @@ namespace kg.ValheimEnchantmentSystem
             ConfigFolder = Path.Combine(Paths.ConfigPath, "ValheimEnchantmentSystem");
             if (!Directory.Exists(ConfigFolder))
                 Directory.CreateDirectory(ConfigFolder);
+
+            _serverConfigLocked = config("1 - General", "Lock Configuration", Toggle.On, "If on, synced configuration can be changed by server admins only.");
+            _ = ConfigSync.AddLockingConfigEntry(_serverConfigLocked);
+            _failFastOnAutoloadError = ClientConfig(
+                "Integrity",
+                "Fail Fast On Autoload Error",
+                true,
+                new ConfigDescription(
+                    "Stop plugin initialization when an autoload class throws. Disable only for debugging compatibility issues.",
+                    null,
+                    new ConfigurationManagerAttributes { Order = FailFastOnAutoloadOrder }));
 
             _asset = GetAssetBundle("kg_enchantment");
 
@@ -71,7 +105,12 @@ namespace kg.ValheimEnchantmentSystem
                 }
                 catch (Exception ex)
                 {
-                    Utils.print($"Autoload exception on method {method}. Class {autoload.Value}\n:{ex}", ConsoleColor.Red);
+                    Exception root = ex is TargetInvocationException { InnerException: not null } tie ? tie.InnerException : ex;
+                    Utils.print($"Autoload exception on method {method}. Class {autoload.Value}\n:{root}", ConsoleColor.Red);
+                    if (_failFastOnAutoloadError.Value)
+                        throw new InvalidOperationException(
+                            $"Autoload failed for {autoload.Value.FullName}.{method.Name}. Set [Client] Integrity - Fail Fast On Autoload Error = false to continue startup for debugging.",
+                            root);
                 }
             }
             
@@ -82,7 +121,13 @@ namespace kg.ValheimEnchantmentSystem
                     WorkingAs.Server => t.GetCustomAttribute<ClientOnlyPatch>() == null, 
                     _ => true
                 }).Do(type => Harmony.CreateClassProcessor(type).Patch());
-            
+
+            SetupWatcher();
+            if (saveOnSet)
+            {
+                Config.SaveOnConfigSet = true;
+                Config.Save();
+            }
         } 
  
         private void Update()
@@ -97,6 +142,17 @@ namespace kg.ValheimEnchantmentSystem
         {
             Other_Mods_APIs.Start();
         }
+
+        private void OnDestroy()
+        {
+            Config.Save();
+            if (_configWatcher != null)
+            {
+                _configWatcher.EnableRaisingEvents = false;
+                _configWatcher.Dispose();
+                _configWatcher = null;
+            }
+        }
         
         private static AssetBundle GetAssetBundle(string filename) 
         { 
@@ -106,10 +162,103 @@ namespace kg.ValheimEnchantmentSystem
             return AssetBundle.LoadFromStream(stream);
         } 
 
-        private static ConfigEntry<T> config<T>(string group, string name, T value, ConfigDescription description,
+        private static string WithSyncTag(string description, bool synchronizedSetting)
+        {
+            const string syncedTag = "[Synced with Server]";
+            const string notSyncedTag = "[Not Synced with Server]";
+            if (description.Contains(syncedTag) || description.Contains(notSyncedTag))
+            {
+                return description;
+            }
+
+            string tag = synchronizedSetting ? syncedTag : notSyncedTag;
+            return string.IsNullOrWhiteSpace(description) ? tag : $"{description} {tag}";
+        }
+
+        private static int NextOrderForSection(string section)
+        {
+            if (_nextOrderBySection.TryGetValue(section, out int current))
+            {
+                _nextOrderBySection[section] = current - 1;
+                return current;
+            }
+
+            _nextOrderBySection[section] = -1;
+            return 0;
+        }
+
+        private static bool IsOrderType(Type type) => type == typeof(int) || type == typeof(int?);
+
+        private static bool HasOrderTag(object? tag)
+        {
+            if (tag == null)
+            {
+                return false;
+            }
+
+            Type tagType = tag.GetType();
+            PropertyInfo? orderProperty = tagType.GetProperty("Order", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (orderProperty != null && IsOrderType(orderProperty.PropertyType))
+            {
+                return true;
+            }
+
+            FieldInfo? orderField = tagType.GetField("Order", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            return orderField != null && IsOrderType(orderField.FieldType);
+        }
+
+        private static object[] EnsureOrderTag(string section, object[]? tags)
+        {
+            object[] safeTags = tags ?? Array.Empty<object>();
+            if (safeTags.Any(HasOrderTag))
+            {
+                return safeTags;
+            }
+
+            int order = NextOrderForSection(section);
+            return safeTags.Concat(new object[] { new ConfigurationManagerAttributes { Order = order } }).ToArray();
+        }
+
+        private void SetupWatcher()
+        {
+            _configWatcher = new FileSystemWatcher(Paths.ConfigPath, ConfigFileName)
+            {
+                IncludeSubdirectories = true,
+                SynchronizingObject = ThreadingHelper.SynchronizingObject,
+                EnableRaisingEvents = true
+            };
+            _configWatcher.Changed += ReadConfigValues;
+            _configWatcher.Created += ReadConfigValues;
+            _configWatcher.Renamed += ReadConfigValues;
+        }
+
+        private void ReadConfigValues(object sender, FileSystemEventArgs e)
+        {
+            if (!File.Exists(ConfigFileFullPath))
+            {
+                return;
+            }
+
+            try
+            {
+                Config.Reload();
+            }
+            catch
+            {
+                Logger.LogError($"Could not load {ConfigFileName}. Check config format and values.");
+            }
+        }
+
+        public static ConfigEntry<T> config<T>(string group, string name, T value, ConfigDescription description,
             bool synchronizedSetting = true) 
         {
-            ConfigEntry<T> configEntry = _thistype.Config.Bind(group, name, value, description);
+            object[] orderedTags = EnsureOrderTag(group, description.Tags);
+            ConfigDescription extendedDescription = new(
+                WithSyncTag(description.Description, synchronizedSetting),
+                description.AcceptableValues,
+                orderedTags
+            );
+            ConfigEntry<T> configEntry = _thistype.Config.Bind(group, name, value, extendedDescription);
             SyncedConfigEntry<T> syncedConfigEntry = ConfigSync.AddConfigEntry(configEntry);
             syncedConfigEntry.SynchronizedConfig = synchronizedSetting; 
             return configEntry;
@@ -120,11 +269,21 @@ namespace kg.ValheimEnchantmentSystem
             config(group, name, value, new ConfigDescription(description), synchronizedSetting);
 
         // Client-only config that is not synced with server
-        public static ConfigEntry<T> ClientConfig<T>(string group, string name, T value, string description)
+        public static ConfigEntry<T> ClientConfig<T>(string group, string name, T value, ConfigDescription description)
         {
             // Use group as prefix in name to keep all client settings in one section
             string configName = string.IsNullOrEmpty(group) ? name : $"{group} - {name}";
-            return _thistype.Config.Bind("Client", configName, value, new ConfigDescription(description));
+            object[] orderedTags = EnsureOrderTag("Client", description.Tags);
+            ConfigDescription clientDescription = new(
+                WithSyncTag(description.Description, false),
+                description.AcceptableValues,
+                orderedTags
+            );
+            ConfigEntry<T> configEntry = _thistype.Config.Bind("Client", configName, value, clientDescription);
+            return configEntry;
         }
+
+        public static ConfigEntry<T> ClientConfig<T>(string group, string name, T value, string description) =>
+            ClientConfig(group, name, value, new ConfigDescription(description));
     }
 }

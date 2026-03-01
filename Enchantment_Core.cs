@@ -1,7 +1,7 @@
 ﻿﻿using System.Reflection.Emit;
 using System.Text.RegularExpressions;
 using ItemDataManager;
-using kg.ValheimEnchantmentSystem.Managers.ItemManager;
+using ItemManager;
 using JetBrains.Annotations;
 using kg.ValheimEnchantmentSystem.Configs;
 using kg.ValheimEnchantmentSystem.Misc;

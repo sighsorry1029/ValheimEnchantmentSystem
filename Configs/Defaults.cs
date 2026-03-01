@@ -362,8 +362,11 @@ public static class Defaults
     public static string YAML_Stats_Armor => new SerializerBuilder().ConfigureDefaultValuesHandling(
         DefaultValuesHandling.OmitDefaults).Build().Serialize(DefaultStats_Armor);
 
-    public static string YAML_Reqs => new SerializerBuilder()
-        .ConfigureDefaultValuesHandling(DefaultValuesHandling.OmitDefaults).Build().Serialize(DefaultReqs);
+    public static string YAML_Reqs => System.Text.RegularExpressions.Regex.Replace(
+        new SerializerBuilder()
+            .ConfigureDefaultValuesHandling(DefaultValuesHandling.OmitDefaults).Build().Serialize(DefaultReqs),
+        @"(?m)^\s*-\s",
+        "  - ");
 
     public static string YAML_Colors => new SerializerBuilder().ConfigureDefaultValuesHandling(DefaultValuesHandling
         .OmitDefaults).Build().Serialize(DefaultColors);

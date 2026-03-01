@@ -1,4 +1,4 @@
-﻿using System;
+﻿﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -18,8 +18,7 @@ using UnityEngine.UI;
 using Debug = UnityEngine.Debug;
 using Object = UnityEngine.Object;
 
-using kg.ValheimEnchantmentSystem;
-namespace kg.ValheimEnchantmentSystem.Managers.PieceManager;
+namespace PieceManager;
 
 [PublicAPI]
 public enum CraftingTable
@@ -165,7 +164,6 @@ public class BuildPiece
     public static bool ConfigurationEnabled = true;
 
     public readonly GameObject Prefab;
-    internal readonly BaseUnityPlugin? ownerPlugin;
 
     [Description("Specifies the resources needed to craft the piece.\nUse .Add to add resources with their internal ID and an amount.\nUse one .Add for each resource type the building piece should need.")]
     public readonly RequiredResourcesList RequiredItems = new();
@@ -249,7 +247,6 @@ public class BuildPiece
     public BuildPiece(AssetBundle bundle, string prefabName)
     {
         Prefab = PiecePrefabManager.RegisterPrefab(bundle, prefabName);
-        ownerPlugin = plugin;
         registeredPieces.Add(this);
     }
 
@@ -301,22 +298,22 @@ public class BuildPiece
             plugin.Config.SaveOnConfigSet = false;
             foreach (BuildPiece piece in registeredPieces)
             {
-                if (piece.SpecialProperties.NoConfig || piece.ownerPlugin != plugin) continue;
+                if (piece.SpecialProperties.NoConfig) continue;
                 PieceConfig cfg = pieceConfigs[piece] = new PieceConfig();
                 Piece piecePrefab = piece.Prefab.GetComponent<Piece>();
                 string pieceName = piecePrefab.m_name;
-                string englishName = english.Localize(pieceName).Trim();
+                string englishName = new Regex(@"[=\n\t\\""\'\[\]]*").Replace(english.Localize(pieceName), "").Trim();
                 string localizedName = Localization.instance.Localize(pieceName).Trim();
 
                 int order = 0;
 
                 cfg.category = config(englishName, "Build Table Category", piece.Category.Category,
                     new ConfigDescription($"Build Category where {localizedName} is available.", null,
-                        new ConfigurationManagerAttributes { Order = --order, Category = localizedName }));
+                        new ConfigurationManagerAttributes { Order = ++order, Category = englishName }));
                 ConfigurationManagerAttributes customTableAttributes = new()
                 {
-                    Order = --order, Browsable = cfg.category.Value == BuildPieceCategory.Custom,
-                    Category = localizedName,
+                    Order = ++order, Browsable = cfg.category.Value == BuildPieceCategory.Custom,
+                    Category = englishName,
                 };
                 cfg.customCategory = config(englishName, "Custom Build Category", piece.Category.custom, new ConfigDescription("", null, customTableAttributes));
 
@@ -356,12 +353,12 @@ public class BuildPiece
                     piecePrefab.m_category = (Piece.PieceCategory)cfg.category.Value;
                 }
 
-                cfg.tools = config(englishName, "Tools", string.Join(", ", piece.activeTools), new ConfigDescription($"Comma separated list of tools where {localizedName} is available.", null, new ConfigurationManagerAttributes { Order = --order, Category = localizedName }));
+                cfg.tools = config(englishName, "Tools", string.Join(", ", piece.activeTools), new ConfigDescription($"Comma separated list of tools where {localizedName} is available.", null, customTableAttributes));
                 piece.activeTools = cfg.tools.Value.Split(',').Select(s => s.Trim()).ToArray();
                 cfg.tools.SettingChanged += (_, _) =>
                 {
                     Inventory[] inventories = Player.s_players.Select(p => p.GetInventory()).Concat(Object.FindObjectsByType<Container>(FindObjectsSortMode.None).Select(c => c.GetInventory())).Where(c => c is not null).ToArray();
-                    Dictionary<string, List<PieceTable>> tools = ObjectDB.instance.m_items.Select(p => p.GetComponent<ItemDrop>()).Where(c => c && c.GetComponent<ZNetView>()).Concat(ItemDrop.s_instances).Select(i => new KeyValuePair<string, ItemDrop.ItemData>(global::Utils.GetPrefabName(i.gameObject), i.m_itemData)).Concat(inventories.SelectMany(i => i.GetAllItems()).Select(i => new KeyValuePair<string, ItemDrop.ItemData>(i.m_dropPrefab.name, i))).Where(kv => kv.Value.m_shared.m_buildPieces).GroupBy(kv => kv.Key).ToDictionary(g => g.Key, g => g.Select(kv => kv.Value.m_shared.m_buildPieces).Distinct().ToList());
+                    Dictionary<string, List<PieceTable>> tools = ObjectDB.instance.m_items.Select(p => p.GetComponent<ItemDrop>()).Where(c => c && c.GetComponent<ZNetView>()).Concat(ItemDrop.s_instances).Select(i => new KeyValuePair<string, ItemDrop.ItemData>(Utils.GetPrefabName(i.gameObject), i.m_itemData)).Concat(inventories.SelectMany(i => i.GetAllItems()).Select(i => new KeyValuePair<string, ItemDrop.ItemData>(i.m_dropPrefab.name, i))).Where(kv => kv.Value.m_shared.m_buildPieces).GroupBy(kv => kv.Key).ToDictionary(g => g.Key, g => g.Select(kv => kv.Value.m_shared.m_buildPieces).Distinct().ToList());
 
                     foreach (string tool in piece.activeTools)
                     {
@@ -405,14 +402,14 @@ public class BuildPiece
                     cfg.extensionTable = config(englishName, "Extends Station",
                         piece.Extension.ExtensionStations.First().Table,
                         new ConfigDescription($"Crafting station that {localizedName} extends.", null,
-                            new ConfigurationManagerAttributes { Order = --order, Category = localizedName }));
+                            new ConfigurationManagerAttributes { Order = ++order }));
                     cfg.customExtentionTable = config(englishName, "Custom Extend Station",
                         piece.Extension.ExtensionStations.First().custom ?? "",
                         new ConfigDescription("", null, customTableAttributes));
                     cfg.maxStationDistance = config(englishName, "Max Station Distance",
                         piece.Extension.ExtensionStations.First().maxStationDistance,
                         new ConfigDescription($"Distance from the station that {localizedName} can be placed.", null,
-                            new ConfigurationManagerAttributes { Order = --order, Category = localizedName }));
+                            new ConfigurationManagerAttributes { Order = ++order }));
                     List<ConfigurationManagerAttributes> hideWhenNoneAttributes = [];
 
                     void ExtensionTableConfigChanged(object o, EventArgs e)
@@ -451,7 +448,7 @@ public class BuildPiece
                     cfg.maxStationDistance.SettingChanged += ExtensionTableConfigChanged;
 
                     ConfigurationManagerAttributes tableLevelAttributes = new()
-                        { Order = --order, Browsable = cfg.extensionTable.Value != CraftingTable.None };
+                        { Order = ++order, Browsable = cfg.extensionTable.Value != CraftingTable.None };
                     hideWhenNoneAttributes.Add(tableLevelAttributes);
                 }
 
@@ -459,7 +456,7 @@ public class BuildPiece
                 {
                     List<ConfigurationManagerAttributes> hideWhenNoneAttributes = [];
 
-                    cfg.table = config(englishName, "Crafting Station", piece.Crafting.Stations.First().Table, new ConfigDescription($"Crafting station where {localizedName} is available.", null, new ConfigurationManagerAttributes { Order = --order, Category = localizedName }));
+                    cfg.table = config(englishName, "Crafting Station", piece.Crafting.Stations.First().Table, new ConfigDescription($"Crafting station where {localizedName} is available.", null, new ConfigurationManagerAttributes { Order = ++order }));
                     cfg.customTable = config(englishName, "Custom Crafting Station", piece.Crafting.Stations.First().custom ?? "", new ConfigDescription("", null, customTableAttributes));
 
                     void TableConfigChanged(object o, EventArgs e)
@@ -493,13 +490,13 @@ public class BuildPiece
                     cfg.table.SettingChanged += TableConfigChanged;
                     cfg.customTable.SettingChanged += TableConfigChanged;
 
-                    ConfigurationManagerAttributes tableLevelAttributes = new() { Order = --order, Browsable = cfg.table.Value != CraftingTable.None, Category = localizedName };
+                    ConfigurationManagerAttributes tableLevelAttributes = new() { Order = ++order, Browsable = cfg.table.Value != CraftingTable.None };
                     hideWhenNoneAttributes.Add(tableLevelAttributes);
                 }
 
                 ConfigEntry<string> itemConfig(string name, string value, string desc)
                 {
-                    ConfigurationManagerAttributes attributes = new() { CustomDrawer = DrawConfigTable, Order = --order, Category = localizedName };
+                    ConfigurationManagerAttributes attributes = new() { CustomDrawer = DrawConfigTable, Order = ++order, Category = englishName };
                     return config(englishName, name, value, new ConfigDescription(desc, null, attributes));
                 }
 
@@ -527,7 +524,7 @@ public class BuildPiece
                     conversion.config = new Conversion.ConversionConfig();
                     int index = i;
 
-                    conversion.config.input = config(englishName, $"{prefix}Conversion Input Item", conversion.Input, new ConfigDescription($"Conversion input item within {englishName}", null, new ConfigurationManagerAttributes { Category = localizedName }));
+                    conversion.config.input = config(englishName, $"{prefix}Conversion Input Item", conversion.Input, new ConfigDescription($"Conversion input item within {englishName}", null, new ConfigurationManagerAttributes { Category = englishName }));
                     conversion.config.input.SettingChanged += (_, _) =>
                     {
                         if (index < piece.conversions.Count && ObjectDB.instance is { } objectDB)
@@ -536,7 +533,7 @@ public class BuildPiece
                             piece.conversions[index].m_from = inputItem;
                         }
                     };
-                    conversion.config.output = config(englishName, $"{prefix}Conversion Output Item", conversion.Output, new ConfigDescription($"Conversion output item within {englishName}", null, new ConfigurationManagerAttributes { Category = localizedName }));
+                    conversion.config.output = config(englishName, $"{prefix}Conversion Output Item", conversion.Output, new ConfigDescription($"Conversion output item within {englishName}", null, new ConfigurationManagerAttributes { Category = englishName }));
                     conversion.config.output.SettingChanged += (_, _) =>
                     {
                         if (index < piece.conversions.Count && ObjectDB.instance is { } objectDB)
@@ -965,38 +962,9 @@ public class BuildPiece
         }
     }
 
-    private static bool hasConfigSync = true;
-    private static object? _configSync;
-
-    private static object? configSync
-    {
-        get
-        {
-            if (_configSync != null || !hasConfigSync) return _configSync;
-            if (Assembly.GetExecutingAssembly().GetType("ServerSync.ConfigSync") is { } configSyncType)
-            {
-                _configSync = Activator.CreateInstance(configSyncType, plugin.Info.Metadata.GUID + " PieceManager");
-                configSyncType.GetField("CurrentVersion")
-                    .SetValue(_configSync, plugin.Info.Metadata.Version.ToString());
-                configSyncType.GetProperty("IsLocked")!.SetValue(_configSync, true);
-            }
-            else
-            {
-                hasConfigSync = false;
-            }
-
-            return _configSync;
-        }
-    }
-
     private static ConfigEntry<T> config<T>(string group, string name, T value, ConfigDescription description)
     {
-        ConfigEntry<T> configEntry = plugin.Config.Bind(group, name, value, description);
-
-        configSync?.GetType().GetMethod("AddConfigEntry")!.MakeGenericMethod(typeof(T))
-            .Invoke(configSync, [configEntry]);
-
-        return configEntry;
+        return global::kg.ValheimEnchantmentSystem.ValheimEnchantmentSystem.config(group, name, value, description, true);
     }
 
     private static ConfigEntry<T> config<T>(string group, string name, T value, string description) =>
@@ -1283,7 +1251,6 @@ public class AdminSyncing
                 if (!piece.SpecialProperties.AdminOnly) continue;
                 Piece piecePrefab = piece.Prefab.GetComponent<Piece>();
                 string pieceName = piecePrefab.m_name;
-                string localizedName = Localization.instance.Localize(pieceName).Trim();
                 if (!ObjectDB.instance || ObjectDB.instance.GetItemPrefab("YmirRemains") == null) continue;
                 foreach (Piece instantiatedPiece in UnityEngine.Object.FindObjectsByType<Piece>(FindObjectsSortMode.None))
                 {
@@ -1858,9 +1825,34 @@ public static class PiecePrefabManager
     {
         foreach (BuildPiece piece in BuildPiece.registeredPieces)
         {
-            foreach (string tool in piece.activeTools)
+            if (piece?.Prefab == null)
             {
-                if (__instance.GetItemPrefab(tool)?.GetComponent<ItemDrop>().m_itemData.m_shared.m_buildPieces is { } pieceTable)
+                continue;
+            }
+
+            string[] tools = piece.activeTools;
+            if (tools == null || tools.Length == 0)
+            {
+                tools = piece.Tool.Tools.DefaultIfEmpty("Hammer").ToArray();
+                piece.activeTools = tools;
+            }
+
+            foreach (string tool in tools)
+            {
+                if (string.IsNullOrWhiteSpace(tool))
+                {
+                    continue;
+                }
+
+                GameObject toolPrefab = __instance.GetItemPrefab(tool);
+                if (!toolPrefab)
+                {
+                    continue;
+                }
+
+                ItemDrop? itemDrop = toolPrefab.GetComponent<ItemDrop>();
+                PieceTable? pieceTable = itemDrop?.m_itemData?.m_shared?.m_buildPieces;
+                if (pieceTable is not null)
                 {
                     if (!pieceTable.m_pieces.Contains(piece.Prefab))
                     {

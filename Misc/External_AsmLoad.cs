@@ -1,4 +1,4 @@
-﻿using kg.ValheimEnchantmentSystem.Managers.ItemManager;
+using ItemManager;
 using JetBrains.Annotations;
 
 namespace kg.ValheimEnchantmentSystem.Misc;
@@ -13,7 +13,7 @@ public static class External_AsmLoad
     }
     private static void LoadAsm(string name)
     {
-        var manifestResourceNames = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceNames();
+        string[] manifestResourceNames = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceNames();
         if (manifestResourceNames.Length == 0)
         {
             Utils.print("No resources found", ConsoleColor.Red);

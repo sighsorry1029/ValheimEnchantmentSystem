@@ -1,4 +1,4 @@
-﻿using System;
+﻿﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -10,7 +10,7 @@ using HarmonyLib;
 using JetBrains.Annotations;
 using UnityEngine;
 
-namespace kg.ValheimEnchantmentSystem.Managers.SkillManager;
+namespace SkillManager;
 
 [PublicAPI]
 public class Skill
@@ -415,18 +415,9 @@ public class Skill
 	private static BaseUnityPlugin? _plugin;
 	private static BaseUnityPlugin plugin => _plugin ??= (BaseUnityPlugin)BepInEx.Bootstrap.Chainloader.ManagerObject.GetComponent(Assembly.GetExecutingAssembly().DefinedTypes.First(t => t.IsClass && typeof(BaseUnityPlugin).IsAssignableFrom(t)));
 
-	private static bool hasConfigSync = true;
-	private static object? _configSync;
-
-    private static object? configSync => kg.ValheimEnchantmentSystem.ValheimEnchantmentSystem.ConfigSync;
-
 	private static ConfigEntry<T> config<T>(string group, string name, T value, ConfigDescription description)
 	{
-		ConfigEntry<T> configEntry = plugin.Config.Bind(group, name, value, description);
-
-		configSync?.GetType().GetMethod("AddConfigEntry")!.MakeGenericMethod(typeof(T)).Invoke(configSync, new object[] { configEntry });
-
-		return configEntry;
+		return global::kg.ValheimEnchantmentSystem.ValheimEnchantmentSystem.config(group, name, value, description, true);
 	}
 
 	private static ConfigEntry<T> config<T>(string group, string name, T value, string description) => config(group, name, value, new ConfigDescription(description));
