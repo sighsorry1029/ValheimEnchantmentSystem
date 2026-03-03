@@ -1,9 +1,23 @@
-﻿﻿using YamlDotNet.Serialization;
+﻿using System.Globalization;
+using System.Text;
+using YamlDotNet.Serialization;
 
 namespace kg.ValheimEnchantmentSystem.Configs;
 
 public static class Defaults
 {
+    private static string SerializeDefaultChances(Dictionary<int, SyncedData.Chance_Data> chances)
+    {
+        StringBuilder sb = new();
+        foreach (KeyValuePair<int, SyncedData.Chance_Data> entry in chances)
+        {
+            sb.Append(entry.Key).Append(':').Append('\n');
+            sb.Append("  success: ").Append(entry.Value.success.ToString("0.###", CultureInfo.InvariantCulture)).Append('\n');
+            sb.Append("  destroy: ").Append(entry.Value.destroy.ToString("0.###", CultureInfo.InvariantCulture)).Append('\n');
+        }
+
+        return sb.ToString();
+    }
     private static readonly Dictionary<int, SyncedData.Stat_Data> DefaultStats_Weapons =
         new Dictionary<int, SyncedData.Stat_Data>()
         {
@@ -371,11 +385,9 @@ public static class Defaults
     public static string YAML_Colors => new SerializerBuilder().ConfigureDefaultValuesHandling(DefaultValuesHandling
         .OmitDefaults).Build().Serialize(DefaultColors);
 
-    public static string YAML_Chances_Weapons => new SerializerBuilder().ConfigureDefaultValuesHandling(
-        DefaultValuesHandling.OmitDefaults).Build().Serialize(DefaultChances_Weapons);
+    public static string YAML_Chances_Weapons => SerializeDefaultChances(DefaultChances_Weapons);
 
-    public static string YAML_Chances_Armor => new SerializerBuilder().ConfigureDefaultValuesHandling(
-        DefaultValuesHandling.OmitDefaults).Build().Serialize(DefaultChances_Armor);
+    public static string YAML_Chances_Armor => SerializeDefaultChances(DefaultChances_Armor);
 
     public static string YAML_Overrides_Chances => new SerializerBuilder().ConfigureDefaultValuesHandling(
         DefaultValuesHandling.OmitDefaults).Build().Serialize(DefaultOverrides_Chances);

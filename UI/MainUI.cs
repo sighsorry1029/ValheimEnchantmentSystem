@@ -400,7 +400,6 @@ public static class VES_UI
         {
             if (_currentItem == null) return;
             Enchantment_Core.Enchanted en = _currentItem.Data().Get<Enchantment_Core.Enchanted>();
-            if (en && en!.GetEnchantmentChance() <= 0) return;
 
             _useBless = !_useBless;
 
