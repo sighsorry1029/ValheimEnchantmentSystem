@@ -1,4 +1,4 @@
-﻿﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -261,21 +261,53 @@ public class BuildPiece
     internal string[] activeTools = null!;
 
     private static object? configManager;
+    private static bool configBindingsInitialized;
 
-    internal static void Patch_FejdStartup(FejdStartup __instance)
+    private static string GetConfigGroup(BuildPiece piece) => piece.Prefab.name;
+
+    private static string GetLocalizedDisplayName(string token, string fallback)
     {
+        if (Localization.instance == null)
+        {
+            return fallback;
+        }
+
+        string localized = Localization.instance.Localize(token).Trim();
+        return string.IsNullOrWhiteSpace(localized) ? fallback : localized;
+    }
+
+    internal static void Patch_FejdStartup(FejdStartup __instance) => EnsureConfigBindings();
+
+    internal static void EnsureConfigBindings()
+    {
+        if (configBindingsInitialized)
+        {
+            return;
+        }
+
         Assembly? bepinexConfigManager = AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => a.GetName().Name == "ConfigurationManager");
 
         Type? configManagerType = bepinexConfigManager?.GetType("ConfigurationManager.ConfigurationManager");
         configManager = configManagerType == null
             ? null
             : BepInEx.Bootstrap.Chainloader.ManagerObject.GetComponent(configManagerType);
+        PropertyInfo? displayingWindowProperty = configManagerType?.GetProperty("DisplayingWindow");
+        MethodInfo? buildSettingListMethod = configManagerType?.GetMethod("BuildSettingList");
+        long nextAllowedConfigRefreshTick = 0;
+        const int configRefreshDebounceMs = 100;
 
         void ReloadConfigDisplay()
         {
-            if (configManagerType?.GetProperty("DisplayingWindow")!.GetValue(configManager) is true)
+            long nowTick = DateTime.UtcNow.Ticks / TimeSpan.TicksPerMillisecond;
+            if (nowTick < nextAllowedConfigRefreshTick)
             {
-                configManagerType.GetMethod("BuildSettingList")!.Invoke(configManager, []);
+                return;
+            }
+
+            nextAllowedConfigRefreshTick = nowTick + configRefreshDebounceMs;
+            if (displayingWindowProperty?.GetValue(configManager) is true)
+            {
+                buildSettingListMethod?.Invoke(configManager, []);
             }
         }
 
@@ -302,12 +334,13 @@ public class BuildPiece
                 PieceConfig cfg = pieceConfigs[piece] = new PieceConfig();
                 Piece piecePrefab = piece.Prefab.GetComponent<Piece>();
                 string pieceName = piecePrefab.m_name;
-                string englishName = new Regex(@"[=\n\t\\""\'\[\]]*").Replace(english.Localize(pieceName), "").Trim();
-                string localizedName = Localization.instance.Localize(pieceName).Trim();
+                string englishName = new Regex(@"[=\n\t\\""\'\[\]]*").Replace(LocalizationCache.LocalizeForConfig(pieceName), "").Trim();
+                string localizedName = GetLocalizedDisplayName(pieceName, englishName);
+                string configGroup = GetConfigGroup(piece);
 
                 int order = 0;
 
-                cfg.category = config(englishName, "Build Table Category", piece.Category.Category,
+                cfg.category = config(configGroup, "Build Table Category", piece.Category.Category,
                     new ConfigDescription($"Build Category where {localizedName} is available.", null,
                         new ConfigurationManagerAttributes { Order = ++order, Category = englishName }));
                 ConfigurationManagerAttributes customTableAttributes = new()
@@ -315,7 +348,7 @@ public class BuildPiece
                     Order = ++order, Browsable = cfg.category.Value == BuildPieceCategory.Custom,
                     Category = englishName,
                 };
-                cfg.customCategory = config(englishName, "Custom Build Category", piece.Category.custom, new ConfigDescription("", null, customTableAttributes));
+                cfg.customCategory = config(configGroup, "Custom Build Category", piece.Category.custom, new ConfigDescription("", null, customTableAttributes));
 
                 void BuildTableConfigChanged(object o, EventArgs e)
                 {
@@ -353,7 +386,7 @@ public class BuildPiece
                     piecePrefab.m_category = (Piece.PieceCategory)cfg.category.Value;
                 }
 
-                cfg.tools = config(englishName, "Tools", string.Join(", ", piece.activeTools), new ConfigDescription($"Comma separated list of tools where {localizedName} is available.", null, customTableAttributes));
+                cfg.tools = config(configGroup, "Tools", string.Join(", ", piece.activeTools), new ConfigDescription($"Comma separated list of tools where {localizedName} is available.", null, customTableAttributes));
                 piece.activeTools = cfg.tools.Value.Split(',').Select(s => s.Trim()).ToArray();
                 cfg.tools.SettingChanged += (_, _) =>
                 {
@@ -399,14 +432,14 @@ public class BuildPiece
                 if (piece.Extension.ExtensionStations.Count > 0)
                 {
                     StationExtension pieceExtensionComp = piece.Prefab.GetOrAddComponent<StationExtension>();
-                    cfg.extensionTable = config(englishName, "Extends Station",
+                    cfg.extensionTable = config(configGroup, "Extends Station",
                         piece.Extension.ExtensionStations.First().Table,
                         new ConfigDescription($"Crafting station that {localizedName} extends.", null,
                             new ConfigurationManagerAttributes { Order = ++order }));
-                    cfg.customExtentionTable = config(englishName, "Custom Extend Station",
+                    cfg.customExtentionTable = config(configGroup, "Custom Extend Station",
                         piece.Extension.ExtensionStations.First().custom ?? "",
                         new ConfigDescription("", null, customTableAttributes));
-                    cfg.maxStationDistance = config(englishName, "Max Station Distance",
+                    cfg.maxStationDistance = config(configGroup, "Max Station Distance",
                         piece.Extension.ExtensionStations.First().maxStationDistance,
                         new ConfigDescription($"Distance from the station that {localizedName} can be placed.", null,
                             new ConfigurationManagerAttributes { Order = ++order }));
@@ -440,7 +473,6 @@ public class BuildPiece
                         }
 
                         ReloadConfigDisplay();
-                        plugin.Config.Save();
                     }
 
                     cfg.extensionTable.SettingChanged += ExtensionTableConfigChanged;
@@ -456,8 +488,8 @@ public class BuildPiece
                 {
                     List<ConfigurationManagerAttributes> hideWhenNoneAttributes = [];
 
-                    cfg.table = config(englishName, "Crafting Station", piece.Crafting.Stations.First().Table, new ConfigDescription($"Crafting station where {localizedName} is available.", null, new ConfigurationManagerAttributes { Order = ++order }));
-                    cfg.customTable = config(englishName, "Custom Crafting Station", piece.Crafting.Stations.First().custom ?? "", new ConfigDescription("", null, customTableAttributes));
+                    cfg.table = config(configGroup, "Crafting Station", piece.Crafting.Stations.First().Table, new ConfigDescription($"Crafting station where {localizedName} is available.", null, new ConfigurationManagerAttributes { Order = ++order }));
+                    cfg.customTable = config(configGroup, "Custom Crafting Station", piece.Crafting.Stations.First().custom ?? "", new ConfigDescription("", null, customTableAttributes));
 
                     void TableConfigChanged(object o, EventArgs e)
                     {
@@ -484,7 +516,6 @@ public class BuildPiece
                         }
 
                         ReloadConfigDisplay();
-                        plugin.Config.Save();
                     }
 
                     cfg.table.SettingChanged += TableConfigChanged;
@@ -497,7 +528,7 @@ public class BuildPiece
                 ConfigEntry<string> itemConfig(string name, string value, string desc)
                 {
                     ConfigurationManagerAttributes attributes = new() { CustomDrawer = DrawConfigTable, Order = ++order, Category = englishName };
-                    return config(englishName, name, value, new ConfigDescription(desc, null, attributes));
+                    return config(configGroup, name, value, new ConfigDescription(desc, null, attributes));
                 }
 
                 cfg.craft = itemConfig("Crafting Costs", new SerializedRequirements(piece.RequiredItems.Requirements).ToString(), $"Item costs to craft {localizedName}");
@@ -524,7 +555,7 @@ public class BuildPiece
                     conversion.config = new Conversion.ConversionConfig();
                     int index = i;
 
-                    conversion.config.input = config(englishName, $"{prefix}Conversion Input Item", conversion.Input, new ConfigDescription($"Conversion input item within {englishName}", null, new ConfigurationManagerAttributes { Category = englishName }));
+                    conversion.config.input = config(configGroup, $"{prefix}Conversion Input Item", conversion.Input, new ConfigDescription($"Conversion input item within {englishName}", null, new ConfigurationManagerAttributes { Category = englishName }));
                     conversion.config.input.SettingChanged += (_, _) =>
                     {
                         if (index < piece.conversions.Count && ObjectDB.instance is { } objectDB)
@@ -533,7 +564,7 @@ public class BuildPiece
                             piece.conversions[index].m_from = inputItem;
                         }
                     };
-                    conversion.config.output = config(englishName, $"{prefix}Conversion Output Item", conversion.Output, new ConfigDescription($"Conversion output item within {englishName}", null, new ConfigurationManagerAttributes { Category = englishName }));
+                    conversion.config.output = config(configGroup, $"{prefix}Conversion Output Item", conversion.Output, new ConfigDescription($"Conversion output item within {englishName}", null, new ConfigurationManagerAttributes { Category = englishName }));
                     conversion.config.output.SettingChanged += (_, _) =>
                     {
                         if (index < piece.conversions.Count && ObjectDB.instance is { } objectDB)
@@ -564,6 +595,8 @@ public class BuildPiece
                 plugin.Config.Save();
             }
         }
+
+        configBindingsInitialized = true;
     }
     private void InitializeNewRegisteredPiece(BuildPiece piece)
     {
@@ -596,6 +629,8 @@ public class BuildPiece
     [HarmonyPriority(Priority.VeryHigh)]
     internal static void Patch_ObjectDBInit(ObjectDB __instance)
     {
+        EnsureConfigBindings();
+
         if (__instance.GetItemPrefab("YmirRemains") == null)
         {
             return;
@@ -934,10 +969,6 @@ public class BuildPiece
         }
     }
 
-    private static Localization? _english;
-
-    private static Localization english => _english ??= LocalizationCache.ForLanguage("English");
-
     internal static BaseUnityPlugin? _plugin = null!;
 
     internal static BaseUnityPlugin plugin
@@ -1079,37 +1110,12 @@ public class LocalizeKey
 
 public static class LocalizationCache
 {
-    private static readonly Dictionary<string, Localization> localizations = new();
+    internal static void LocalizationPostfix(Localization __instance, string language) => LocalizationManager.SharedLocalizationCache.Track(__instance, language);
 
-    internal static void LocalizationPostfix(Localization __instance, string language)
-    {
-        if (localizations.FirstOrDefault(l => l.Value == __instance).Key is { } oldValue)
-        {
-            localizations.Remove(oldValue);
-        }
+    public static Localization ForLanguage(string? language = null) => LocalizationManager.SharedLocalizationCache.ForLanguage(language);
 
-        if (!localizations.ContainsKey(language))
-        {
-            localizations.Add(language, __instance);
-        }
-    }
-
-    public static Localization ForLanguage(string? language = null)
-    {
-        if (localizations.TryGetValue(language ?? PlayerPrefs.GetString("language", "English"),
-                out Localization localization))
-        {
-            return localization;
-        }
-
-        localization = new Localization();
-        if (language is not null)
-        {
-            localization.SetupLanguage(language);
-        }
-
-        return localization;
-    }
+    public static string LocalizeForConfig(string token, string preferredLanguage = "English") =>
+        LocalizationManager.SharedLocalizationCache.LocalizeForConfig(token, preferredLanguage);
 }
 
 public class AdminSyncing
@@ -1315,7 +1321,6 @@ public static class PiecePrefabManager
         harmony.Patch(AccessTools.DeclaredMethod(typeof(FejdStartup), nameof(FejdStartup.Awake)), new HarmonyMethod(AccessTools.DeclaredMethod(typeof(BuildPiece), nameof(BuildPiece.Patch_FejdStartup))));
         harmony.Patch(AccessTools.DeclaredMethod(typeof(FejdStartup), nameof(FejdStartup.Awake)), new HarmonyMethod(AccessTools.DeclaredMethod(typeof(BuildPiece), nameof(BuildPiece.KickoffQueuedSnapshots))));
         harmony.Patch(AccessTools.DeclaredMethod(typeof(Localization), nameof(Localization.LoadCSV)), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(LocalizeKey), nameof(LocalizeKey.AddLocalizedKeys))));
-        harmony.Patch(AccessTools.DeclaredMethod(typeof(Localization), nameof(Localization.SetupLanguage)), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(LocalizationCache), nameof(LocalizationCache.LocalizationPostfix))));
         harmony.Patch(AccessTools.DeclaredMethod(typeof(ObjectDB), nameof(ObjectDB.Awake)), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(PiecePrefabManager), nameof(Patch_ObjectDBInit))));
         harmony.Patch(AccessTools.DeclaredMethod(typeof(ObjectDB), nameof(ObjectDB.Awake)), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(BuildPiece), nameof(BuildPiece.Patch_ObjectDBInit))));
         harmony.Patch(AccessTools.DeclaredMethod(typeof(ObjectDB), nameof(ObjectDB.CopyOtherDB)), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(PiecePrefabManager), nameof(Patch_ObjectDBInit))));

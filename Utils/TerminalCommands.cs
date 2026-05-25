@@ -1,4 +1,4 @@
-﻿using ItemDataManager;
+using ItemDataManager;
 using JetBrains.Annotations;
 using kg.ValheimEnchantmentSystem.Configs;
 using kg.ValheimEnchantmentSystem.Misc;
@@ -7,6 +7,32 @@ namespace kg.ValheimEnchantmentSystem;
 
 public static class TerminalCommands
 {
+    private static void WriteCommandMessage(string message)
+    {
+        Utils.print(message);
+        if (Chat.instance)
+        {
+            Chat.instance.m_hideTimer = 0f;
+            Chat.instance.AddString(message);
+        }
+    }
+
+    [HarmonyPatch(typeof(Terminal), nameof(Terminal.InitTerminal))]
+    private static class Terminal_InitTerminal_ConfigReload_Patch
+    {
+        [UsedImplicitly]
+        private static void Postfix(Terminal __instance)
+        {
+            new Terminal.ConsoleCommand("ves_reloadconfig", ConfigHotReloadRegistrar.Usage, args =>
+            {
+                string target = args.Length > 1 ? args[1] : "all";
+                bool success = ConfigHotReloadRegistrar.TryReload(target, out string message);
+                ConfigReloadPoller.ResetSnapshots();
+                WriteCommandMessage(success ? message : $"Reload request completed with issues: {message}");
+            });
+        }
+    }
+
     [HarmonyPatch(typeof(Terminal),nameof(Terminal.InitTerminal))]
     [ClientOnlyPatch]
     private static class Terminal_InitTerminal_Patch
@@ -23,9 +49,8 @@ public static class TerminalCommands
                 Enchantment_Core.Enchanted en = weapon.Data().GetOrCreate<Enchantment_Core.Enchanted>();
                 en.level = level;
                 en.Save();
-                Chat.instance.m_hideTimer = 0f;
-                Chat.instance.AddString("Enchantment level set to " + level);
-                ValheimEnchantmentSystem._thistype.StartCoroutine(Enchantment_Core.FrameSkipEquip(weapon));
+                EnchantmentSideEffects.ApplyStateChanged(en, refreshEquipment: true);
+                WriteCommandMessage("Enchantment level set to " + level);
             });
             
             new Terminal.ConsoleCommand("setenchantall", "", (args) =>
@@ -39,6 +64,8 @@ public static class TerminalCommands
                     en.level = level;
                     en.Save();
                 }
+
+                Enchantment_VFX.UpdateGrid();
             });
         }
     }

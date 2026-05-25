@@ -16,15 +16,99 @@ using YamlDotNet.Serialization;
 namespace LocalizationManager;
 
 [PublicAPI]
+public static class SharedLocalizationCache
+{
+    private static readonly Dictionary<string, WeakReference<Localization>> Localizations = new();
+    private static readonly object CacheLock = new();
+
+    public static void Track(Localization localization, string language)
+    {
+        lock (CacheLock)
+        {
+            if (Localizations.FirstOrDefault(pair => pair.Value.TryGetTarget(out Localization value) && value == localization).Key is { } oldLanguage)
+            {
+                Localizations.Remove(oldLanguage);
+            }
+
+            Localizations[language] = new WeakReference<Localization>(localization);
+        }
+    }
+
+    public static Localization ForLanguage(string? language = null)
+    {
+        bool explicitLanguageRequested = language != null;
+        string selectedLanguage = language ?? PlayerPrefs.GetString("language", "English");
+
+        lock (CacheLock)
+        {
+            if (Localizations.TryGetValue(selectedLanguage, out WeakReference<Localization>? reference) &&
+                reference.TryGetTarget(out Localization cachedLocalization))
+            {
+                return cachedLocalization;
+            }
+        }
+
+        if (Localization.m_instance != null)
+        {
+            Localization active = Localization.instance;
+            string activeLanguage = active.GetSelectedLanguage();
+            Track(active, activeLanguage);
+            if (!explicitLanguageRequested || string.Equals(activeLanguage, selectedLanguage, StringComparison.OrdinalIgnoreCase))
+            {
+                return active;
+            }
+
+            throw new InvalidOperationException($"Requested localization '{selectedLanguage}' is not cached. Active language is '{activeLanguage}'.");
+        }
+
+        throw new InvalidOperationException($"No localization instance is available for language '{selectedLanguage}'.");
+    }
+
+    public static string LocalizeForConfig(string token, string preferredLanguage = "English")
+    {
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return string.Empty;
+        }
+
+        string normalizedToken = token.StartsWith("$", StringComparison.Ordinal) ? token : "$" + token;
+        string localizationKey = normalizedToken.TrimStart('$');
+        if (Localizer.TryGetConfigText(preferredLanguage, localizationKey, out string directText))
+        {
+            return directText;
+        }
+
+        try
+        {
+            string localized = ForLanguage(preferredLanguage).Localize(normalizedToken).Trim();
+            if (!string.IsNullOrWhiteSpace(localized) && !string.Equals(localized, normalizedToken, StringComparison.Ordinal))
+            {
+                return localized;
+            }
+        }
+        catch
+        {
+            // Fall through to deterministic token-derived fallback.
+        }
+
+        string fallback = normalizedToken.TrimStart('$').Replace('_', ' ').Trim();
+        return fallback.Length == 0 ? normalizedToken : fallback;
+    }
+}
+
+[PublicAPI]
 public class Localizer
 {
     private static readonly Dictionary<string, Dictionary<string, Func<string>>> PlaceholderProcessors = new();
     private static readonly Dictionary<string, Dictionary<string, string>> LoadedTexts = new();
+    private static readonly object LoadedTextsLock = new();
     private static readonly ConditionalWeakTable<Localization, string> LocalizationLanguage = new();
     private static readonly List<WeakReference<Localization>> LocalizationObjects = [];
     private static readonly List<string> FileExtensions = [".json", ".yml"];
 
     private static BaseUnityPlugin? _plugin;
+    private static readonly object ExternalLocalizationFilesLock = new();
+    private static Dictionary<string, string>? _externalLocalizationFiles;
     public static event Action? OnLocalizationComplete;
 
     private static BaseUnityPlugin plugin
@@ -65,6 +149,38 @@ public class Localizer
 
     private static bool HasSupportedExtension(string filePath) =>
         FileExtensions.Contains(Path.GetExtension(filePath), StringComparer.OrdinalIgnoreCase);
+
+    private static Dictionary<string, string> BuildExternalLocalizationFiles()
+    {
+        Dictionary<string, string> localizationFiles = new();
+        string pluginDirectory = Path.GetDirectoryName(Paths.PluginPath)!;
+        foreach (string file in Directory.GetFiles(pluginDirectory, $"{plugin.Info.Metadata.GUID}.*", SearchOption.AllDirectories).Where(HasSupportedExtension))
+        {
+            if (TryParseLanguageFromExternalFile(file) is not { } key)
+            {
+                continue;
+            }
+
+            if (localizationFiles.ContainsKey(key))
+            {
+                Debug.LogWarning($"Duplicate key {key} found for {plugin.Info.Metadata.GUID}. The duplicate file found at {file} will be skipped.");
+                continue;
+            }
+
+            localizationFiles[key] = file;
+        }
+
+        return localizationFiles;
+    }
+
+    private static Dictionary<string, string> GetExternalLocalizationFiles()
+    {
+        lock (ExternalLocalizationFilesLock)
+        {
+            _externalLocalizationFiles ??= BuildExternalLocalizationFiles();
+            return _externalLocalizationFiles;
+        }
+    }
 
     private static void UpdatePlaceholderText(Localization localization, string key)
     {
@@ -144,7 +260,28 @@ public class Localizer
         }
     }
 
-    public static void Load() => _ = plugin;
+    public static bool TryGetConfigText(string language, string key, out string text)
+    {
+        text = string.Empty;
+        if (string.IsNullOrWhiteSpace(language) || string.IsNullOrWhiteSpace(key))
+        {
+            return false;
+        }
+
+        Dictionary<string, string>? texts = EnsureConfigTextsLoaded(language);
+        if (texts == null || !texts.TryGetValue(key, out string localizedText) || string.IsNullOrWhiteSpace(localizedText))
+        {
+            return false;
+        }
+
+        text = localizedText.Trim();
+        return text.Length > 0;
+    }
+
+    public static void Load()
+    {
+        _ = plugin;
+    }
 
     public static void LoadLocalizationLater(Localization __instance) => LoadLocalization(Localization.instance, __instance.GetSelectedLanguage());
 
@@ -158,24 +295,9 @@ public class Localizer
             }
 
             LocalizationLanguage.Add(__instance, language);
+            SharedLocalizationCache.Track(__instance, language);
 
-            Dictionary<string, string> localizationFiles = new();
-            foreach (string file in Directory.GetFiles(Path.GetDirectoryName(Paths.PluginPath)!, $"{plugin.Info.Metadata.GUID}.*", SearchOption.AllDirectories).Where(HasSupportedExtension))
-            {
-                if (TryParseLanguageFromExternalFile(file) is not { } key)
-                {
-                    continue;
-                }
-
-                if (localizationFiles.ContainsKey(key))
-                {
-                    Debug.LogWarning($"Duplicate key {key} found for {plugin.Info.Metadata.GUID}. The duplicate file found at {file} will be skipped.");
-                }
-                else
-                {
-                    localizationFiles[key] = file;
-                }
-            }
+            Dictionary<string, string> localizationFiles = GetExternalLocalizationFiles();
 
             if (LoadTranslationFromAssembly("English") is not { } englishAssemblyData)
             {
@@ -235,15 +357,55 @@ public class Localizer
 
     private static byte[]? LoadTranslationFromAssembly(string language)
     {
+        Assembly assembly = typeof(Localizer).Assembly;
         foreach (string extension in FileExtensions)
         {
-            if (ReadEmbeddedFileBytes("translations." + language + extension) is { } data)
+            if (ReadEmbeddedFileBytes("translations." + language + extension, assembly) is { } data)
             {
                 return data;
             }
         }
 
         return null;
+    }
+
+    private static Dictionary<string, string>? EnsureConfigTextsLoaded(string language)
+    {
+        lock (LoadedTextsLock)
+        {
+            if (LoadedTexts.TryGetValue(language, out Dictionary<string, string>? existingTexts))
+            {
+                return existingTexts;
+            }
+
+            Dictionary<string, string> localizationFiles = GetExternalLocalizationFiles();
+            string? localizationData = null;
+            if (localizationFiles.TryGetValue(language, out string? externalLocalizationFile))
+            {
+                localizationData = File.ReadAllText(externalLocalizationFile);
+            }
+            else if (LoadTranslationFromAssembly(language) is { } assemblyData)
+            {
+                localizationData = Encoding.UTF8.GetString(assemblyData);
+            }
+
+            if (localizationData == null)
+            {
+                return null;
+            }
+
+            Dictionary<string, string>? parsedTexts = new DeserializerBuilder()
+                .IgnoreFields()
+                .Build()
+                .Deserialize<Dictionary<string, string>?>(localizationData);
+            if (parsedTexts == null)
+            {
+                return null;
+            }
+
+            LoadedTexts[language] = parsedTexts;
+            return parsedTexts;
+        }
     }
 
     public static byte[]? ReadEmbeddedFileBytes(string resourceFileName, Assembly? containingAssembly = null)
@@ -261,5 +423,5 @@ public class Localizer
 
 public static class LocalizationManagerVersion
 {
-    public const string Version = "1.4.1";
+    public const string Version = "1.4.2";
 }

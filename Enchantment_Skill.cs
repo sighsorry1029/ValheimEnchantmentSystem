@@ -1,6 +1,6 @@
 using JetBrains.Annotations;
 using kg.ValheimEnchantmentSystem.Misc;
-using SkillManager;
+using kg.ValheimEnchantmentSystem.Platform;
 
 namespace kg.ValheimEnchantmentSystem;
 
@@ -11,7 +11,6 @@ public static class Enchantment_Skill
     [UsedImplicitly]
     private static void OnInit()
     {
-        new Skill("kg_Enchantment", "enchantment.png") { Configurable = true };
-        SkillType_Enchantment = (Skills.SkillType)Mathf.Abs("kg_Enchantment".GetStableHashCode());
+        SkillType_Enchantment = SkillRegistrationService.RegisterConfigurableSkill("kg_Enchantment", "enchantment.png");
     }
 } 

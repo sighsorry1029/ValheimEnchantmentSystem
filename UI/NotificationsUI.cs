@@ -1,4 +1,4 @@
-﻿using JetBrains.Annotations;
+using JetBrains.Annotations;
 using kg.ValheimEnchantmentSystem.Configs;
 using kg.ValheimEnchantmentSystem.Misc;
 
@@ -125,11 +125,26 @@ public static class Notifications_UI
             Scaler.localScale = OriginalScale;
     }
 
+    internal static void ResetTransientState()
+    {
+        _notifications.Clear();
+        _requestCooldownUntil.Clear();
+        _dequeueTimer = 1f;
+        Hide();
+    }
+
     private static void Hide()
     {
         _timer = 0f;
-        Scaler.localScale = Vector3.zero;
-        UI.SetActive(false);
+        if (Scaler != null)
+        {
+            Scaler.localScale = Vector3.zero;
+        }
+
+        if (UI != null)
+        {
+            UI.SetActive(false);
+        }
     }
 
     private static void ShowNotification(Notification not)
@@ -293,6 +308,7 @@ public static class Notifications_UI
         [UsedImplicitly]
         private static void Postfix(ZNetScene __instance)
         {
+            ResetTransientState();
             ZRoutedRpc.instance.Register("kg_Enchantment_GlobalNotification",
                 (long sender, string playerName, string itemPrefab, int type, int prevLevel, int level) =>
                 {
@@ -323,6 +339,7 @@ public static class Notifications_UI
         [UsedImplicitly]
         private static void Postfix(ZNetScene __instance)
         {
+            ResetTransientState();
             ZRoutedRpc.instance.Register("kg_Enchantment_GlobalNotification_Request",
                 (long sender, string itemPrefab, int type, int prevLevel, int level) =>
                 {
@@ -331,6 +348,17 @@ public static class Notifications_UI
                     if (!TryResolveSenderPlayerName(sender, out string playerName)) return;
                     ServerPublishNotification(playerName, itemPrefab ?? "No Prefab", type, prevLevel, level);
                 });
+        }
+    }
+
+    [HarmonyPatch(typeof(FejdStartup), nameof(FejdStartup.Awake))]
+    [ClientOnlyPatch]
+    private static class FejdStartup_Awake_Patch
+    {
+        [UsedImplicitly]
+        private static void Postfix()
+        {
+            ResetTransientState();
         }
     }
 }

@@ -1,8 +1,9 @@
-﻿﻿using System.Text;
+using System.Text;
 using JetBrains.Annotations;
+using HarmonyLib;
+using System.Reflection;
 using kg.ValheimEnchantmentSystem.Misc;
 using ServerSync;
-using AutoISP;
 using YamlDotNet.Serialization;
 
 namespace kg.ValheimEnchantmentSystem.Configs;
@@ -10,398 +11,39 @@ namespace kg.ValheimEnchantmentSystem.Configs;
 [VES_Autoload(VES_Autoload.Priority.First)]
 public static class SyncedData
 {
-    private static FileSystemWatcher FSW;
-    private static FileSystemWatcher FSW_Config;
-    private static string YAML_Chances_Weapons;
-    private static string YAML_Chances_Armor;
-    private static string YAML_Stats_Weapons;
-    private static string YAML_Stats_Armor;
-    private static string YAML_Colors;
-    private static string YAML_Reqs;
-
-    private static string Directory_Overrides_Chances;
-    private static string Directory_Overrides_Stats;
-    private static string Directory_Overrides_Colors;
-    private static string Directory_Reqs;
-    
-
-    private static readonly Dictionary<string, Action> FSW_Mapper = new(StringComparer.OrdinalIgnoreCase);
-    private static readonly Dictionary<string, DateTime> LastConfigChanges = new(StringComparer.OrdinalIgnoreCase);
-    private static readonly TimeSpan ConfigReloadDebounce = TimeSpan.FromMilliseconds(750);
-    private const int EnableVfxArmorOrder = 101;
-
-    private class ConfigurationManagerAttributes
-    {
-        [UsedImplicitly] public int? Order;
-    }
-
-    private static ConfigDescription OrderedDescription(string description, int order) => new(
-        description,
-        null,
-        new ConfigurationManagerAttributes { Order = order });
-    
     [UsedImplicitly]
     private static void OnInit()
     {
-        SafetyLevel = ValheimEnchantmentSystem.config("Enchantment", "SafetyLevel", 3,
-            "The level until which enchantments won't destroy the item. Set to 0 to disable.");
-        DropEnchantmentOnUpgrade = ValheimEnchantmentSystem.config("Enchantment", "DropEnchantmentOnUpgrade", false, "Drop enchantment on item upgrade.");
-        ItemFailureType = ValheimEnchantmentSystem.config("Enchantment", "ItemFailureType", ItemDesctructionTypeEnum.LevelDecrease, "LevelDecrease will remove one level on fail, Destroy will destroy item on fail, Combined will use yaml destroy chance and success chance, CombinedEasy will keep or decrease level and never destroy");
-        BlessedScrollsPreventBreak = ValheimEnchantmentSystem.config("Enchantment", "BlessedScrollsPreventBreak", true, "Blessed enchant scrolls prevent breaking of item in case of failed enchant. If set to false enchanting chance is increased instead of preventing item break.");
-        BlessedScrollsAdditionalChance = ValheimEnchantmentSystem.config("Enchantment", "BlessedScrollsAdditionalChance", 25, "Enchanting chance added when using blessed enchant scrolls if the option to prevent breaking of an item in case of failed enchant is set to false.");
-        AllowJewelcraftingMirrorCopyEnchant = ValheimEnchantmentSystem.config("Enchantment", "AllowJewelcraftingMirrorCopyEnchant", false, "Allow jewelcrafting to copy enchantment from one item to another using mirror.");
-        AdditionalEnchantmentChancePerLevel = ValheimEnchantmentSystem.config("Enchantment", "AdditionalEnchantmentChancePerLevel", 0.07f, "Additional enchantment chance per level of Enchantment skill.");
-        AllowVFXArmor = ValheimEnchantmentSystem.ClientConfig("", "EnableVFXArmor", false, OrderedDescription("Allow VFX on armor.", EnableVfxArmorOrder));
-        EnchantmentEnableNotifications = ValheimEnchantmentSystem.config("Notifications", "EnchantmentEnableNotifications", true, "Enable enchantment notifications.");
-        EnchantmentNotificationMinLevel = ValheimEnchantmentSystem.config("Notifications", "EnchantmentNotificationMinLevel", 6, "The minimum level of enchantment to show notification.");
+        EnchantmentSettings.Bind();
+        EnchantmentConfigPaths.Initialize();
+        EnchantmentChanceRepository.Initialize();
+        EnchantmentStatRepository.Initialize();
+        EnchantmentColorRepository.Initialize();
+        EnchantmentRequirementRepository.Initialize(Synced_EnchantmentReqs);
+        ConfigRefreshCoordinator.Initialize();
+    }
 
-        YAML_Stats_Weapons = Path.Combine(ValheimEnchantmentSystem.ConfigFolder, "EnchantmentStats_Weapons.yml");
-        YAML_Stats_Armor = Path.Combine(ValheimEnchantmentSystem.ConfigFolder, "EnchantmentStats_Armor.yml");
-        YAML_Colors = Path.Combine(ValheimEnchantmentSystem.ConfigFolder, "EnchantmentColors.yml");
-        YAML_Reqs = Path.Combine(ValheimEnchantmentSystem.ConfigFolder, "EnchantmentReqs.yml");
-        YAML_Chances_Weapons = Path.Combine(ValheimEnchantmentSystem.ConfigFolder, "EnchantmentChances_Weapons.yml");
-        YAML_Chances_Armor = Path.Combine(ValheimEnchantmentSystem.ConfigFolder, "EnchantmentChances_Armor.yml");
-        Directory_Reqs = Path.Combine(ValheimEnchantmentSystem.ConfigFolder, "AdditionalEnchantmentReqs");
-        Directory_Overrides_Chances = Path.Combine(ValheimEnchantmentSystem.ConfigFolder, "AdditionalOverrides_EnchantmentChances");
-        Directory_Overrides_Stats = Path.Combine(ValheimEnchantmentSystem.ConfigFolder, "AdditionalOverrides_EnchantmentStats");
-        Directory_Overrides_Colors = Path.Combine(ValheimEnchantmentSystem.ConfigFolder, "AdditionalOverrides_EnchantmentColors");
-        
-        if (!Directory.Exists(Directory_Reqs))
-            Directory.CreateDirectory(Directory_Reqs);
-        if (!Directory.Exists(Directory_Overrides_Chances))
-            Directory.CreateDirectory(Directory_Overrides_Chances);
-        if (!Directory.Exists(Directory_Overrides_Stats))
-            Directory.CreateDirectory(Directory_Overrides_Stats);
-        if (!Directory.Exists(Directory_Overrides_Colors))
-            Directory.CreateDirectory(Directory_Overrides_Colors);
-        
+    private static void LoadAuthoritativeYamlData()
+    {
+        EnchantmentChanceRepository.LoadAuthoritativeData();
+        EnchantmentStatRepository.LoadAuthoritativeData();
+        EnchantmentColorRepository.LoadAuthoritativeData();
+        EnchantmentRequirementRepository.LoadAuthoritativeData(Synced_EnchantmentReqs);
+    }
 
-        if (!File.Exists(YAML_Chances_Weapons))
-            YAML_Chances_Weapons.WriteFile(Defaults.YAML_Chances_Weapons);
-        if (!File.Exists(YAML_Chances_Armor))
-            YAML_Chances_Armor.WriteFile(Defaults.YAML_Chances_Armor);
-        if (!File.Exists(YAML_Stats_Weapons))
-            YAML_Stats_Weapons.WriteFile(Defaults.YAML_Stats_Weapons);
-        if (!File.Exists(YAML_Stats_Armor))
-            YAML_Stats_Armor.WriteFile(Defaults.YAML_Stats_Armor);
-        if (!File.Exists(YAML_Colors))
-            YAML_Colors.WriteFile(Defaults.YAML_Colors);
-        if (!File.Exists(YAML_Reqs))
-            YAML_Reqs.WriteFile(Defaults.YAML_Reqs);
-
-        SafetyLevel.SettingChanged += (_, _) => ResetInventory();
-        DropEnchantmentOnUpgrade.SettingChanged += (_, _) => ResetInventory();
-        ItemFailureType.SettingChanged += (_, _) => ResetInventory();
-        BlessedScrollsPreventBreak.SettingChanged += (_, _) => ResetInventory();
-        BlessedScrollsAdditionalChance.SettingChanged += (_, _) => ResetInventory();
-        AllowJewelcraftingMirrorCopyEnchant.SettingChanged += (_, _) => ResetInventory();
-        AdditionalEnchantmentChancePerLevel.SettingChanged += (_, _) => ResetInventory();
-        AllowVFXArmor.SettingChanged += (_, _) => ResetInventory();
-        
-        Synced_EnchantmentChances_Weapons.ValueChanged += ResetInventory;
-        Synced_EnchantmentChances_Armor.ValueChanged += ResetInventory;
-        Synced_EnchantmentStats_Weapons.ValueChanged += ResetInventory;
-        Synced_EnchantmentStats_Armor.ValueChanged += ResetInventory;
-        Synced_EnchantmentColors.ValueChanged += ResetInventory;
-        Synced_EnchantmentReqs.ValueChanged += ResetInventory;
-        Overrides_EnchantmentChances.ValueChanged += ResetInventory;
-        Overrides_EnchantmentStats.ValueChanged += ResetInventory;
-        Overrides_EnchantmentColors.ValueChanged += ResetInventory;
-        
-        Overrides_EnchantmentChances.ValueChanged += OptimizeChances;
-        Overrides_EnchantmentStats.ValueChanged += OptimizeStats;
-        Overrides_EnchantmentColors.ValueChanged += OptimizeColors;
-        
-        Synced_EnchantmentChances_Weapons.Value = YAML_Chances_Weapons.FromYAML<Dictionary<int, Chance_Data>>();
-        Synced_EnchantmentChances_Armor.Value = YAML_Chances_Armor.FromYAML<Dictionary<int, Chance_Data>>();
-        Synced_EnchantmentStats_Weapons.Value = YAML_Stats_Weapons.FromYAML<Dictionary<int, Stat_Data>>();
-        Synced_EnchantmentStats_Armor.Value = YAML_Stats_Armor.FromYAML<Dictionary<int, Stat_Data>>();
-        Synced_EnchantmentColors.Value = YAML_Colors.FromYAML<Dictionary<int, VFX_Data>>();
-        ReadReqs();
-        ReadOverrideChances();
-        ReadOverrideStats();
-        ReadOverrideColors();
-        OptimizeChances();
-        OptimizeStats();
-        OptimizeColors();
-        
-        FSW_Mapper.Add(YAML_Chances_Weapons, () => Synced_EnchantmentChances_Weapons.Value = YAML_Chances_Weapons.FromYAML<Dictionary<int, Chance_Data>>());
-        FSW_Mapper.Add(YAML_Chances_Armor, () => Synced_EnchantmentChances_Armor.Value = YAML_Chances_Armor.FromYAML<Dictionary<int, Chance_Data>>());
-        FSW_Mapper.Add(YAML_Stats_Weapons, () => Synced_EnchantmentStats_Weapons.Value = YAML_Stats_Weapons.FromYAML<Dictionary<int, Stat_Data>>());
-        FSW_Mapper.Add(YAML_Stats_Armor, () => Synced_EnchantmentStats_Armor.Value = YAML_Stats_Armor.FromYAML<Dictionary<int, Stat_Data>>());
-        FSW_Mapper.Add(YAML_Colors, () => Synced_EnchantmentColors.Value = YAML_Colors.FromYAML<Dictionary<int, VFX_Data>>());
-        FSW_Mapper.Add(YAML_Reqs, ReadReqs);
-        FSW_Mapper.Add(ValheimEnchantmentSystem._thistype.Config.ConfigFilePath, () => ValheimEnchantmentSystem._thistype.Config.Reload());
-        FSW_Mapper.Add(Directory_Reqs, ReadReqs);
-        FSW_Mapper.Add(Directory_Overrides_Chances, ReadOverrideChances);
-        FSW_Mapper.Add(Directory_Overrides_Stats, ReadOverrideStats);
-        FSW_Mapper.Add(Directory_Overrides_Colors, ReadOverrideColors);
-        FSW = new FileSystemWatcher(ValheimEnchantmentSystem.ConfigFolder)
+    [HarmonyPatch(typeof(ZNet), nameof(ZNet.Awake))]
+    private static class ZNet_Awake_Patch
+    {
+        [UsedImplicitly]
+        private static void Postfix(ZNet __instance)
         {
-            EnableRaisingEvents = true,
-            IncludeSubdirectories = true,
-            NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.CreationTime | NotifyFilters.Size,
-            SynchronizingObject = ThreadingHelper.SynchronizingObject
-        };
-        FSW.Changed += ConfigChanged;
-        FSW.Created += ConfigChanged;
-        FSW.Deleted += ConfigChanged;
-        FSW.Renamed += ConfigRenamed;
-
-        string? configDir = Path.GetDirectoryName(ValheimEnchantmentSystem._thistype.Config.ConfigFilePath);
-        if (!string.IsNullOrWhiteSpace(configDir))
-        {
-            FSW_Config = new FileSystemWatcher(configDir)
+            if (!__instance || !__instance.IsServer())
             {
-                EnableRaisingEvents = true,
-                IncludeSubdirectories = false,
-                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.CreationTime | NotifyFilters.Size,
-                SynchronizingObject = ThreadingHelper.SynchronizingObject
-            };
-            FSW_Config.Changed += ConfigChanged;
-            FSW_Config.Created += ConfigChanged;
-            FSW_Config.Deleted += ConfigChanged;
-            FSW_Config.Renamed += ConfigRenamed;
-        }
-    }
-    private static void OptimizeChances()
-    {
-        OPTIMIZED_Overrides_EnchantmentChances.Clear();
-        foreach (OverrideChances chance in Overrides_EnchantmentChances.Value)
-            foreach (string entry in chance.Items)
-                 OPTIMIZED_Overrides_EnchantmentChances[entry] = chance.Chances;
-    }
-    private static void OptimizeColors()
-    {
-        OPTIMIZED_Overrides_EnchantmentColors.Clear();
-        foreach (OverrideColors chance in Overrides_EnchantmentColors.Value)
-            foreach (string entry in chance.Items)
-                OPTIMIZED_Overrides_EnchantmentColors[entry] = chance.Colors;
-    }
-    private static void OptimizeStats()
-    {
-        OPTIMIZED_Overrides_EnchantmentStats.Clear();
-        foreach (OverrideStats chance in Overrides_EnchantmentStats.Value)
-            foreach (string entry in chance.Items)
-                OPTIMIZED_Overrides_EnchantmentStats[entry] = chance.Stats;
-    }
-    private static void ReadReqs()
-    {
-        List<EnchantmentReqs> result = new();
-        result.AddRange(ParseReqsFile(YAML_Reqs));
-
-        foreach (string file in Directory.GetFiles(Directory_Reqs, "*.yml", SearchOption.TopDirectoryOnly))
-            result.AddRange(ParseReqsFile(file));
-
-        Synced_EnchantmentReqs.Value = result;
-    }
-
-    private static IEnumerable<EnchantmentReqs> ParseReqsFile(string path)
-    {
-        try
-        {
-            if (!File.Exists(path)) return Enumerable.Empty<EnchantmentReqs>();
-            string text = File.ReadAllText(path);
-            if (string.IsNullOrWhiteSpace(text)) return Enumerable.Empty<EnchantmentReqs>();
-
-            var deserializer = new DeserializerBuilder().Build();
-            if (!HasYamlCompatibleListIndentation(text))
-            {
-                Utils.print($"Invalid reqs indentation in {path}. Use spaces for list indentation and avoid tabs.", ConsoleColor.Red);
-                return Enumerable.Empty<EnchantmentReqs>();
+                return;
             }
 
-            Dictionary<string, List<string>> map = deserializer.Deserialize<Dictionary<string, List<string>>>(text) ?? new();
-            return ConvertSimpleReqs(map);
+            LoadAuthoritativeYamlData();
         }
-        catch (Exception ex)
-        {
-            Utils.print($"Error while deserializing {path}:\n{ex}", ConsoleColor.Red);
-            return Enumerable.Empty<EnchantmentReqs>();
-        }
-    }
-
-    private static bool HasYamlCompatibleListIndentation(string text)
-    {
-        using StringReader reader = new StringReader(text);
-        string? line;
-        while ((line = reader.ReadLine()) != null)
-        {
-            string trimmed = line.Trim();
-            if (trimmed.Length == 0 || trimmed.StartsWith("#")) continue;
-            if (!trimmed.StartsWith("-")) continue;
-
-            int dashIndex = line.IndexOf('-');
-            if (dashIndex < 0) continue;
-
-            string leading = line.Substring(0, dashIndex);
-            if (leading.Contains('\t'))
-            {
-                return false;
-            }
-
-            if (leading.Any(c => c != ' '))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private static void NormalizeReqAmounts(IEnumerable<EnchantmentReqs> list)
-    {
-        foreach (EnchantmentReqs req in list)
-        {
-            if (req.enchant_prefab != null && req.enchant_prefab.amount <= 0)
-                req.enchant_prefab.amount = 1;
-            if (req.blessed_enchant_prefab != null && req.blessed_enchant_prefab.amount <= 0)
-                req.blessed_enchant_prefab.amount = 1;
-        }
-    }
-
-    private static IEnumerable<EnchantmentReqs> ConvertSimpleReqs(Dictionary<string, List<string>> map)
-    {
-        List<EnchantmentReqs> result = new();
-        foreach (KeyValuePair<string, List<string>> entry in map)
-        {
-            if (!TryResolveReqKey(entry.Key, out SingleReq enchant, out SingleReq blessed))
-                continue;
-
-            result.Add(new EnchantmentReqs
-            {
-                enchant_prefab = enchant,
-                blessed_enchant_prefab = blessed,
-                Items = entry.Value ?? new List<string>()
-            });
-        }
-
-        return result;
-    }
-
-    private static bool TryResolveReqKey(string key, out SingleReq enchant, out SingleReq blessed)
-    {
-        enchant = null;
-        blessed = null;
-
-        if (string.IsNullOrWhiteSpace(key)) return false;
-        string normalized = key.Trim();
-
-        char tier = '\0';
-        int open = normalized.IndexOf('(');
-        int close = normalized.IndexOf(')');
-        if (open >= 0 && close > open + 1)
-            tier = normalized[open + 1];
-        else if (normalized.Length > 0 && char.IsLetter(normalized[0]))
-            tier = normalized[0];
-
-        if (tier == '\0') return false;
-
-        string type;
-        if (normalized.IndexOf("armor", StringComparison.OrdinalIgnoreCase) >= 0)
-            type = "Armor";
-        else if (normalized.IndexOf("weap", StringComparison.OrdinalIgnoreCase) >= 0)
-            type = "Weapon";
-        else
-            return false;
-
-        string basePrefab = $"kg_EnchantScroll_{type}_{tier}";
-        string blessedPrefab = $"kg_EnchantScroll_{type}_Blessed_{tier}";
-        enchant = new SingleReq(basePrefab, 1);
-        blessed = new SingleReq(blessedPrefab, 1);
-        return true;
-    }
-    private static void ReadOverrideChances()
-    {
-        List<OverrideChances> result = new();
-
-        foreach (string file in Directory.GetFiles(Directory_Overrides_Chances, "*.yml", SearchOption.TopDirectoryOnly))
-            if (file.FromYAML<List<OverrideChances>>() is {} data)
-                result.AddRange(data);
-
-        Overrides_EnchantmentChances.Value = result;
-    }
-    private static void ReadOverrideStats()
-    {
-        List<OverrideStats> result = new();
-
-        foreach (string file in Directory.GetFiles(Directory_Overrides_Stats, "*.yml", SearchOption.TopDirectoryOnly))
-            if (file.FromYAML<List<OverrideStats>>() is {} data)
-                result.AddRange(data);
-
-        Overrides_EnchantmentStats.Value = result;
-    }
-    private static void ReadOverrideColors()
-    {
-        List<OverrideColors> result = new();
-
-        foreach (string file in Directory.GetFiles(Directory_Overrides_Colors, "*.yml", SearchOption.TopDirectoryOnly))
-            if (file.FromYAML<List<OverrideColors>>() is {} data)
-                result.AddRange(data);
-
-        Overrides_EnchantmentColors.Value = result;
-    }
-    
-    private static void ResetInventory()
-    {
-        Enchantment_VFX.UpdateGrid();
-    }
-
-    private static bool ShouldReloadMappedKey(string mappedKey)
-    {
-        DateTime now = DateTime.UtcNow;
-        if (LastConfigChanges.TryGetValue(mappedKey, out DateTime last) && now - last < ConfigReloadDebounce) return false;
-        LastConfigChanges[mappedKey] = now;
-        return true;
-    }
-
-    private static void InvokeReloadAction(string mappedKey, string changedPath, Action action)
-    {
-        if (!ShouldReloadMappedKey(mappedKey)) return;
-        try
-        {
-            Utils.print($"Reloading config {changedPath}");
-            action.Invoke();
-        }
-        catch (Exception ex)
-        {
-            Utils.print($"Error while reloading config {changedPath}: {ex}", ConsoleColor.Red);
-        }
-    }
-
-    private static void HandleConfigChangePath(string path)
-    {
-        if (string.IsNullOrWhiteSpace(path)) return;
-
-        string extension = Path.GetExtension(path);
-        bool isTrackedFile = extension.Equals(".yml", StringComparison.OrdinalIgnoreCase) ||
-                             extension.Equals(".cfg", StringComparison.OrdinalIgnoreCase);
-
-        if (isTrackedFile && FSW_Mapper.TryGetValue(path, out Action fileAction))
-            InvokeReloadAction(path, path, fileAction);
-
-        string folder = Path.GetDirectoryName(path);
-        if (folder == null) return;
-        if (FSW_Mapper.TryGetValue(folder, out Action folderAction))
-            InvokeReloadAction(folder, path, folderAction);
-    }
-
-    private static bool CanProcessConfigEvent()
-    {
-        return Game.instance && ZNet.instance && ZNet.instance.IsServer();
-    }
-
-    private static void ConfigChanged(object sender, FileSystemEventArgs e)
-    {
-        if (!CanProcessConfigEvent()) return;
-        HandleConfigChangePath(e.FullPath);
-    }
-
-    private static void ConfigRenamed(object sender, RenamedEventArgs e)
-    {
-        if (!CanProcessConfigEvent()) return;
-        HandleConfigChangePath(e.OldFullPath);
-        HandleConfigChangePath(e.FullPath);
     }
 
     public static string GetColor(Enchantment_Core.Enchanted en, out int variant, bool trimApha) =>
@@ -409,28 +51,7 @@ public static class SyncedData
 
     public static string GetColor(string dropPrefab, int level, out int variant, bool trimApha, string defaultValue = "#00000000")
     {
-        variant = 0;
-        if (level == 0) return trimApha ? defaultValue.Substring(0,7) : defaultValue;
-        if (dropPrefab != null && OPTIMIZED_Overrides_EnchantmentColors.TryGetValue(dropPrefab, out Dictionary<int, VFX_Data> overriden))
-        {
-            if (overriden.TryGetValue(level, out VFX_Data overrideVfxData))
-            {
-                string result = overrideVfxData.color;
-                if (trimApha) result = result.Substring(0, 7);
-                variant = Mathf.Clamp(overrideVfxData.variant, 0, Enchantment_VFX.VFXs.Count - 1);
-                return result;
-            }
-        }
-        
-        if (Synced_EnchantmentColors.Value.TryGetValue(level, out VFX_Data vfxData))
-        {
-            string result = vfxData.color;
-            if (trimApha) result = result.Substring(0, 7);
-            variant = Mathf.Clamp(vfxData.variant - 1, 0, Enchantment_VFX.VFXs.Count - 1);
-            return result;
-        }
-
-        return trimApha ? defaultValue.Substring(0,7) : defaultValue;
+        return EnchantmentColorRepository.GetColor(dropPrefab, level, out variant, trimApha, defaultValue);
     }
 
     public static Chance_Data GetEnchantmentChance(Enchantment_Core.Enchanted en)
@@ -441,67 +62,43 @@ public static class SyncedData
 
     public static Chance_Data GetEnchantmentChance(string dropPrefab, int level, bool isWeapon)
     {
-        if (dropPrefab != null && OPTIMIZED_Overrides_EnchantmentChances.TryGetValue(dropPrefab, out Dictionary<int, Chance_Data> overriden))
-        {
-            if (overriden.TryGetValue(level, out Chance_Data overrideChance))
-                return overrideChance; 
-        }
-
-        Dictionary<int, Chance_Data> target = isWeapon ? Synced_EnchantmentChances_Weapons.Value : Synced_EnchantmentChances_Armor.Value;
-        return target.TryGetValue(level, out Chance_Data chance) ? chance : new Chance_Data() { success = 0 };
+        return EnchantmentChanceRepository.GetEnchantmentChance(dropPrefab, level, isWeapon);
     }
 
     public static bool IsLevelEnchantable(string dropPrefab, int level, bool isWeapon)
     {
-        if (dropPrefab != null && OPTIMIZED_Overrides_EnchantmentChances.TryGetValue(dropPrefab, out Dictionary<int, Chance_Data> overriden))
-        {
-            if (overriden.TryGetValue(level, out Chance_Data overrideChance))
-                return overrideChance.success >= 0 && overrideChance.destroy >= 0;
-        }
-
-        Dictionary<int, Chance_Data> target = isWeapon ? Synced_EnchantmentChances_Weapons.Value : Synced_EnchantmentChances_Armor.Value;
-        if (target.TryGetValue(level, out Chance_Data chance))
-            return chance.success >= 0 && chance.destroy >= 0;
-        return false;
+        return EnchantmentChanceRepository.IsLevelEnchantable(dropPrefab, level, isWeapon) &&
+               EnchantmentStatRepository.HasStatIncrease(dropPrefab, level + 1, isWeapon);
     }
 
     public static Stat_Data GetStatIncrease(Enchantment_Core.Enchanted en)
     {
-        if (en.level == 0) return null;
-        string dropPrefab = en.Item.m_dropPrefab?.name;
-        if (dropPrefab != null && OPTIMIZED_Overrides_EnchantmentStats.TryGetValue(dropPrefab, out Dictionary<int, Stat_Data> overriden))
-        {
-            return overriden.TryGetValue(en.level, out Stat_Data overrideChance) ? overrideChance : null;
-        }
+        return EnchantmentStatRepository.GetStatIncrease(en);
+    }
 
-        Dictionary<int, Stat_Data> target = en.Item.IsWeapon() ? Synced_EnchantmentStats_Weapons.Value : Synced_EnchantmentStats_Armor.Value;
-        return target.TryGetValue(en.level, out Stat_Data increase) ? increase : null;
+    public static Stat_Data GetStatIncrease(string dropPrefab, int level, bool isWeapon)
+    {
+        return EnchantmentStatRepository.GetStatIncrease(dropPrefab, level, isWeapon);
     }
 
     public static EnchantmentReqs GetReqs(string prefab)
     {
-        return prefab == null ? null : Synced_EnchantmentReqs.Value.Find(x => x.Items.Contains(prefab));
-    }
-
-    public static float GetAdditionalEnchantmentChance()
-    {
-        if (!Player.m_localPlayer) return 0;
-        float enchantmentLevel = Player.m_localPlayer.GetSkillLevel(Enchantment_Skill.SkillType_Enchantment);
-        return enchantmentLevel * AdditionalEnchantmentChancePerLevel.Value;
+        return EnchantmentRequirementRepository.GetReqs(Synced_EnchantmentReqs.Value, prefab);
     }
 
     public enum ItemDesctructionTypeEnum{ LevelDecrease, Destroy, Combined, CombinedEasy }
     
-    public static ConfigEntry<int> SafetyLevel;
-    public static ConfigEntry<bool> DropEnchantmentOnUpgrade;
-    public static ConfigEntry<ItemDesctructionTypeEnum> ItemFailureType;
-    public static ConfigEntry<bool> BlessedScrollsPreventBreak;
-    public static ConfigEntry<int> BlessedScrollsAdditionalChance;
-    public static ConfigEntry<bool> AllowJewelcraftingMirrorCopyEnchant;
-    public static ConfigEntry<float> AdditionalEnchantmentChancePerLevel;
-    public static ConfigEntry<int> EnchantmentNotificationMinLevel;
-    public static ConfigEntry<bool> EnchantmentEnableNotifications;
-    public static ConfigEntry<bool> AllowVFXArmor;
+    public static ConfigEntry<int> SafetyLevel => EnchantmentSettings.SafetyLevel;
+    public static ConfigEntry<bool> DropEnchantmentOnUpgrade => EnchantmentSettings.DropEnchantmentOnUpgrade;
+    public static ConfigEntry<ItemDesctructionTypeEnum> ItemFailureType => EnchantmentSettings.ItemFailureType;
+    public static ConfigEntry<int> FailedEnchantLevelDecrease => EnchantmentSettings.FailedEnchantLevelDecrease;
+    public static ConfigEntry<bool> BlessedScrollsPreventBreak => EnchantmentSettings.BlessedScrollsPreventBreak;
+    public static ConfigEntry<int> BlessedScrollsAdditionalChance => EnchantmentSettings.BlessedScrollsAdditionalChance;
+    public static ConfigEntry<bool> AllowJewelcraftingMirrorCopyEnchant => EnchantmentSettings.AllowJewelcraftingMirrorCopyEnchant;
+    public static ConfigEntry<float> AdditionalEnchantmentChancePerLevel => EnchantmentSettings.AdditionalEnchantmentChancePerLevel;
+    public static ConfigEntry<float> FailedEnchantSkillExpMultiplier => EnchantmentSettings.FailedEnchantSkillExpMultiplier;
+    public static ConfigEntry<int> EnchantmentNotificationMinLevel => EnchantmentSettings.EnchantmentNotificationMinLevel;
+    public static ConfigEntry<bool> EnchantmentEnableNotifications => EnchantmentSettings.EnchantmentEnableNotifications;
 
     public static readonly CustomSyncedValue<Dictionary<int, Chance_Data>> Synced_EnchantmentChances_Weapons =
         new(ValheimEnchantmentSystem.ConfigSync, "EnchantmentGlobalChances_Weapons",
@@ -539,14 +136,88 @@ public static class SyncedData
         new(ValheimEnchantmentSystem.ConfigSync, "EnchantmentReqs",
             new List<EnchantmentReqs>());
 
-    private static readonly Dictionary<string, Dictionary<int, Chance_Data>> OPTIMIZED_Overrides_EnchantmentChances = new();
-    private static readonly Dictionary<string, Dictionary<int, VFX_Data>> OPTIMIZED_Overrides_EnchantmentColors = new();
-    private static readonly Dictionary<string, Dictionary<int, Stat_Data>> OPTIMIZED_Overrides_EnchantmentStats = new();
+    private static void WriteEnum<TEnum>(ref ZPackage pkg, TEnum value) where TEnum : struct, Enum
+        => pkg.Write(Convert.ToInt32(value));
 
-    private static readonly List<FieldInfo> _stat_Data_Cached_Fields = AccessTools.GetDeclaredFields(typeof(Stat_Data)).Where(x => x.FieldType.IsValueType).ToList();
+    private static TEnum ReadEnum<TEnum>(ref ZPackage pkg) where TEnum : struct, Enum
+        => (TEnum)Enum.ToObject(typeof(TEnum), pkg.ReadInt());
+
+    private static void WriteSerializable<T>(ref ZPackage pkg, T value) where T : class, ISerializableParameter
+    {
+        pkg.Write(value != null);
+        value?.Serialize(ref pkg);
+    }
+
+    private static T ReadSerializable<T>(ref ZPackage pkg) where T : class, ISerializableParameter, new()
+    {
+        if (!pkg.ReadBool())
+        {
+            return null;
+        }
+
+        T value = new();
+        value.Deserialize(ref pkg);
+        return value;
+    }
+
+    private static void WriteStringList(ref ZPackage pkg, List<string> values)
+    {
+        values ??= new List<string>();
+        pkg.Write(values.Count);
+        foreach (string value in values)
+        {
+            pkg.Write(value ?? "");
+        }
+    }
+
+    private static List<string> ReadStringList(ref ZPackage pkg)
+    {
+        int count = pkg.ReadInt();
+        List<string> values = new(count);
+        for (int i = 0; i < count; i++)
+        {
+            values.Add(pkg.ReadString());
+        }
+
+        return values;
+    }
+
+    private static void WriteSerializableDictionary<T>(ref ZPackage pkg, Dictionary<int, T> values)
+        where T : class, ISerializableParameter
+    {
+        values ??= new Dictionary<int, T>();
+        pkg.Write(values.Count);
+        foreach (KeyValuePair<int, T> entry in values)
+        {
+            pkg.Write(entry.Key);
+            pkg.Write(entry.Value != null);
+            entry.Value?.Serialize(ref pkg);
+        }
+    }
+
+    private static Dictionary<int, T> ReadSerializableDictionary<T>(ref ZPackage pkg)
+        where T : class, ISerializableParameter, new()
+    {
+        int count = pkg.ReadInt();
+        Dictionary<int, T> values = new(count);
+        for (int i = 0; i < count; i++)
+        {
+            int key = pkg.ReadInt();
+            if (!pkg.ReadBool())
+            {
+                continue;
+            }
+
+            T value = new();
+            value.Deserialize(ref pkg);
+            values[key] = value;
+        }
+
+        return values;
+    }
+
     public partial class Stat_Data
     {
-        private bool ShouldShow() => _stat_Data_Cached_Fields.Any(x => !x.GetValue(this).Equals(Activator.CreateInstance(x.FieldType)));
         private List<HitData.DamageModPair> cached_resistance_pairs;
         public List<HitData.DamageModPair> GetResistancePairs()
         {
@@ -567,61 +238,9 @@ public static class SyncedData
             cached_resistance_pairs.RemoveAll(x => x.m_modifier == HitData.DamageModifier.Normal);
             return cached_resistance_pairs;
         }
-
-        public string BuildAdditionalStats(string color, bool isTooltip = false)
-        {
-            if (!ShouldShow())
-            {
-                return "\n";
-            }
-            StringBuilder builder = new StringBuilder();
-            if (attack_speed > 0) builder.Append($"\n<color={color}>•</color> $enchantment_attackspeed: <color=#DF745D>+{attack_speed}%</color>");
-            if (movement_speed > 0) builder.Append($"\n<color={color}>•</color> $enchantment_movementspeed: <color=#DF745D>+{movement_speed}%</color>");
-            if (durability_percentage > 0) builder.Append($"\n<color={color}>•</color> $item_durability: <color=#DF745D>+{durability_percentage}%</color>");
-            if (durability > 0) builder.Append($"\n<color={color}>•</color> $item_durability: <color=#DF745D>+{durability}</color>");
-            if (damage_true > 0) builder.Append($"\n<color={color}>•</color> $enchantment_truedamage: +{damage_true}");
-            if (damage_fire > 0) builder.Append($"\n<color={color}>•</color> $inventory_fire: <color=#FFA500>+{damage_fire}</color>");
-            if (damage_blunt > 0) builder.Append($"\n<color={color}>•</color> $inventory_blunt: <color=#FFFF00>+{damage_blunt}</color>");
-            if (damage_slash > 0) builder.Append($"\n<color={color}>•</color> $inventory_slash: <color=#7F00FF>+{damage_slash}</color>");
-            if (damage_pierce > 0) builder.Append($"\n<color={color}>•</color> $inventory_pierce: <color=#D499B9>+{damage_pierce}</color>");
-            if (damage_chop > 0) builder.Append($"\n<color={color}>•</color> $enchantment_chopdamage: <color=#FFAF00>+{damage_chop}</color>");
-            if (damage_pickaxe > 0) builder.Append($"\n<color={color}>•</color> $enchantment_pickaxedamage: <color=#FF00FF>+{damage_pickaxe}</color>");
-            if (damage_frost > 0) builder.Append($"\n<color={color}>•</color> $inventory_frost: <color=#00FFFF>+{damage_frost}</color>");
-            if (damage_lightning > 0) builder.Append($"\n<color={color}>•</color> $inventory_lightning: <color=#0000FF>+{damage_lightning}</color>");
-            if (damage_poison > 0) builder.Append($"\n<color={color}>•</color> $inventory_poison: <color=#00FF00>+{damage_poison}</color>");
-            if (damage_spirit > 0) builder.Append($"\n<color={color}>•</color> $inventory_spirit: <color=#FFFFA0>+{damage_spirit}</color>");
-            if (max_hp > 0) builder.Append($"\n<color={color}>•</color> $se_health: <color=#DD3333>+{max_hp}</color>");
-            if (hp_regen > 0) builder.Append($"\n<color={color}>•</color> $se_healthregen: <color=#DD3333>+{hp_regen}/10s</color>");
-            if (armor > 0) builder.Append($"\n<color={color}>•</color> $item_armor: <color=#009FAF>+{armor}</color>");
-            if (max_stamina > 0) builder.Append($"\n<color={color}>•</color> $se_stamina: <color=#EEEE11>+{max_stamina}</color>");
-            if (stamina_regen > 0) builder.Append($"\n<color={color}>•</color> $se_staminaregen: <color=#EEEE11>+{stamina_regen}/s</color>");
-            if (API_backpacks_additionalrow_x > 0) builder.Append($"\n<color={color}>•</color> $enchantment_backpacks_additionalrow_x: <color=#7393B3>{API_backpacks_additionalrow_x}</color>");
-            if (API_backpacks_additionalrow_y > 0) builder.Append($"\n<color={color}>•</color> $enchantment_backpacks_additionalrow_y: <color=#7393B3>{API_backpacks_additionalrow_y}</color>");
-            
-            builder.Append(SE_Stats.GetDamageModifiersTooltipString(GetResistancePairs()).Replace("\n", $"\n<color={color}>•</color> "));
-            
-            builder.Append("\n");
-            return builder.ToString();
-        }
-
-        public string Info_Description()
-        {
-            string result = "";
-            if (damage_percentage > 0)
-            {
-                result += $"\n• $enchantment_bonusespercentdamage: <color=#AF009F>+{damage_percentage}%</color>";
-            }
-            if (armor_percentage > 0)
-            {
-                result += $"\n• $enchantment_bonusespercentarmor: <color=#009FAF>+{armor_percentage}%</color>";
-            }
-            result += BuildAdditionalStats("#FFFFFF");
-            return result;
-        }
     }
     
-    [AutoSerialize]
-    public partial class Stat_Data : ImplicitBool, ISerializableParameter
+    public partial class Stat_Data : ISerializableParameter
     {
         [SerializeField] public int durability;
         [SerializeField] public int durability_percentage;
@@ -659,76 +278,204 @@ public static class SyncedData
         [SerializeField] public int API_backpacks_additionalrow_x;
         [SerializeField] public int API_backpacks_additionalrow_y;
         
-        public void Serialize  (ref ZPackage pkg) => throw new NotImplementedException();
-        public void Deserialize(ref ZPackage pkg) => throw new NotImplementedException();
+        public void Serialize(ref ZPackage pkg)
+        {
+            pkg.Write(durability);
+            pkg.Write(durability_percentage);
+            pkg.Write(armor_percentage);
+            pkg.Write(armor);
+            pkg.Write(damage_percentage);
+            pkg.Write(damage_true);
+            pkg.Write(damage_blunt);
+            pkg.Write(damage_slash);
+            pkg.Write(damage_pierce);
+            pkg.Write(damage_chop);
+            pkg.Write(damage_pickaxe);
+            pkg.Write(damage_fire);
+            pkg.Write(damage_frost);
+            pkg.Write(damage_lightning);
+            pkg.Write(damage_poison);
+            pkg.Write(damage_spirit);
+            WriteEnum(ref pkg, resistance_blunt);
+            WriteEnum(ref pkg, resistance_slash);
+            WriteEnum(ref pkg, resistance_pierce);
+            WriteEnum(ref pkg, resistance_chop);
+            WriteEnum(ref pkg, resistance_pickaxe);
+            WriteEnum(ref pkg, resistance_fire);
+            WriteEnum(ref pkg, resistance_frost);
+            WriteEnum(ref pkg, resistance_lightning);
+            WriteEnum(ref pkg, resistance_poison);
+            WriteEnum(ref pkg, resistance_spirit);
+            pkg.Write(attack_speed);
+            pkg.Write(movement_speed);
+            pkg.Write(max_hp);
+            pkg.Write(max_stamina);
+            pkg.Write(hp_regen);
+            pkg.Write(stamina_regen);
+            pkg.Write(API_backpacks_additionalrow_x);
+            pkg.Write(API_backpacks_additionalrow_y);
+        }
+
+        public void Deserialize(ref ZPackage pkg)
+        {
+            durability = pkg.ReadInt();
+            durability_percentage = pkg.ReadInt();
+            armor_percentage = pkg.ReadSingle();
+            armor = pkg.ReadSingle();
+            damage_percentage = pkg.ReadInt();
+            damage_true = pkg.ReadInt();
+            damage_blunt = pkg.ReadInt();
+            damage_slash = pkg.ReadInt();
+            damage_pierce = pkg.ReadInt();
+            damage_chop = pkg.ReadInt();
+            damage_pickaxe = pkg.ReadInt();
+            damage_fire = pkg.ReadInt();
+            damage_frost = pkg.ReadInt();
+            damage_lightning = pkg.ReadInt();
+            damage_poison = pkg.ReadInt();
+            damage_spirit = pkg.ReadInt();
+            resistance_blunt = ReadEnum<HitData.DamageModifier>(ref pkg);
+            resistance_slash = ReadEnum<HitData.DamageModifier>(ref pkg);
+            resistance_pierce = ReadEnum<HitData.DamageModifier>(ref pkg);
+            resistance_chop = ReadEnum<HitData.DamageModifier>(ref pkg);
+            resistance_pickaxe = ReadEnum<HitData.DamageModifier>(ref pkg);
+            resistance_fire = ReadEnum<HitData.DamageModifier>(ref pkg);
+            resistance_frost = ReadEnum<HitData.DamageModifier>(ref pkg);
+            resistance_lightning = ReadEnum<HitData.DamageModifier>(ref pkg);
+            resistance_poison = ReadEnum<HitData.DamageModifier>(ref pkg);
+            resistance_spirit = ReadEnum<HitData.DamageModifier>(ref pkg);
+            attack_speed = pkg.ReadInt();
+            movement_speed = pkg.ReadInt();
+            max_hp = pkg.ReadInt();
+            max_stamina = pkg.ReadInt();
+            hp_regen = pkg.ReadSingle();
+            stamina_regen = pkg.ReadSingle();
+            API_backpacks_additionalrow_x = pkg.ReadInt();
+            API_backpacks_additionalrow_y = pkg.ReadInt();
+            cached_resistance_pairs = null;
+        }
     }
     
-    [AutoSerialize]
-    public class Chance_Data : ImplicitBool, ISerializableParameter
+    public class Chance_Data : ISerializableParameter
     {
         [SerializeField] public float success;
         [SerializeField] public float destroy;
-        public void Serialize  (ref ZPackage pkg) => throw new NotImplementedException();
-        public void Deserialize(ref ZPackage pkg) => throw new NotImplementedException();
+        public void Serialize(ref ZPackage pkg)
+        {
+            pkg.Write(success);
+            pkg.Write(destroy);
+        }
+
+        public void Deserialize(ref ZPackage pkg)
+        {
+            success = pkg.ReadSingle();
+            destroy = pkg.ReadSingle();
+        }
     }
     
-    [AutoSerialize]
-    public class SingleReq : ImplicitBool, ISerializableParameter
+    public class SingleReq : ISerializableParameter
     {
         [SerializeField] public string prefab;
-        [SerializeField] public int amount;
         public SingleReq(){}
-        public SingleReq (string prefab, int amount) { this.prefab = prefab; this.amount = amount; }
-        public bool IsValid() => !string.IsNullOrEmpty(prefab) && amount > 0 && ZNetScene.instance.GetPrefab(prefab);
-        public void Serialize  (ref ZPackage pkg) => throw new NotImplementedException();
-        public void Deserialize(ref ZPackage pkg) => throw new NotImplementedException();
+        public SingleReq (string prefab) { this.prefab = prefab; }
+        public bool IsValid() => !string.IsNullOrEmpty(prefab) && ZNetScene.instance != null && ZNetScene.instance.GetPrefab(prefab) != null;
+        public void Serialize(ref ZPackage pkg)
+        {
+            pkg.Write(prefab ?? "");
+        }
+
+        public void Deserialize(ref ZPackage pkg)
+        {
+            prefab = pkg.ReadString();
+        }
     }
     
-    [AutoSerialize]
-    public class EnchantmentReqs : ImplicitBool, ISerializableParameter
+    public class EnchantmentReqs : ISerializableParameter
     {
-        [SerializeField] public int required_skill = 0;
         [SerializeField] public SingleReq enchant_prefab = new();
         [SerializeField] public SingleReq blessed_enchant_prefab = new();
         [SerializeField] public List<string> Items = new();
-        public void Serialize  (ref ZPackage pkg) => throw new NotImplementedException();
-        public void Deserialize(ref ZPackage pkg) => throw new NotImplementedException();
+        public void Serialize(ref ZPackage pkg)
+        {
+            WriteSerializable(ref pkg, enchant_prefab);
+            WriteSerializable(ref pkg, blessed_enchant_prefab);
+            WriteStringList(ref pkg, Items);
+        }
+
+        public void Deserialize(ref ZPackage pkg)
+        {
+            enchant_prefab = ReadSerializable<SingleReq>(ref pkg);
+            blessed_enchant_prefab = ReadSerializable<SingleReq>(ref pkg);
+            Items = ReadStringList(ref pkg);
+        }
     }
 
-    [AutoSerialize]
-    public class VFX_Data : ImplicitBool, ISerializableParameter
+    public class VFX_Data : ISerializableParameter
     {
         [SerializeField] public string color = "#00000000";
         [SerializeField] public int variant;
-        public void Serialize  (ref ZPackage pkg) => throw new NotImplementedException();
-        public void Deserialize(ref ZPackage pkg) => throw new NotImplementedException();
+        public void Serialize(ref ZPackage pkg)
+        {
+            pkg.Write(color ?? "");
+            pkg.Write(variant);
+        }
+
+        public void Deserialize(ref ZPackage pkg)
+        {
+            color = pkg.ReadString();
+            variant = pkg.ReadInt();
+        }
     }
     
-    [AutoSerialize]
-    public class OverrideChances : ImplicitBool, ISerializableParameter
+    public class OverrideChances : ISerializableParameter
     {
         [SerializeField] public List<string> Items = new();
         [SerializeField] public Dictionary<int, Chance_Data> Chances = new();
-        public void Serialize  (ref ZPackage pkg) => throw new NotImplementedException();
-        public void Deserialize(ref ZPackage pkg) => throw new NotImplementedException();
+        public void Serialize(ref ZPackage pkg)
+        {
+            WriteStringList(ref pkg, Items);
+            WriteSerializableDictionary(ref pkg, Chances);
+        }
+
+        public void Deserialize(ref ZPackage pkg)
+        {
+            Items = ReadStringList(ref pkg);
+            Chances = ReadSerializableDictionary<Chance_Data>(ref pkg);
+        }
     }
 
-    [AutoSerialize]
-    public class OverrideColors : ImplicitBool, ISerializableParameter
+    public class OverrideColors : ISerializableParameter
     {
         [SerializeField] public List<string> Items = new();
         [SerializeField] public Dictionary<int, VFX_Data> Colors = new();
-        public void Serialize  (ref ZPackage pkg) => throw new NotImplementedException();
-        public void Deserialize(ref ZPackage pkg) => throw new NotImplementedException();
+        public void Serialize(ref ZPackage pkg)
+        {
+            WriteStringList(ref pkg, Items);
+            WriteSerializableDictionary(ref pkg, Colors);
+        }
+
+        public void Deserialize(ref ZPackage pkg)
+        {
+            Items = ReadStringList(ref pkg);
+            Colors = ReadSerializableDictionary<VFX_Data>(ref pkg);
+        }
     }
 
-    [AutoSerialize]
-    public class OverrideStats : ImplicitBool, ISerializableParameter
+    public class OverrideStats : ISerializableParameter
     {
         [SerializeField] public List<string> Items = new();
         [SerializeField] public Dictionary<int, Stat_Data> Stats = new();
-        public void Serialize  (ref ZPackage pkg) => throw new NotImplementedException();
-        public void Deserialize(ref ZPackage pkg) => throw new NotImplementedException();
+        public void Serialize(ref ZPackage pkg)
+        {
+            WriteStringList(ref pkg, Items);
+            WriteSerializableDictionary(ref pkg, Stats);
+        }
+
+        public void Deserialize(ref ZPackage pkg)
+        {
+            Items = ReadStringList(ref pkg);
+            Stats = ReadSerializableDictionary<Stat_Data>(ref pkg);
+        }
     }
     
 }

@@ -1,4 +1,4 @@
-﻿﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -17,6 +17,18 @@ public class Skill
 {
 	private static readonly Dictionary<Skills.SkillType, Skill> skills = new();
 	internal static readonly Dictionary<string, Skill> skillByName = new();
+
+	private readonly struct SavedSkillState
+	{
+		public readonly float Level;
+		public readonly float Accumulator;
+
+		public SavedSkillState(float level, float accumulator)
+		{
+			Level = level;
+			Accumulator = accumulator;
+		}
+	}
 
 	private readonly string skillName;
 	private readonly string internalSkillName;
@@ -94,33 +106,12 @@ public class Skill
 
 	public static class LocalizationCache
 	{
-		private static readonly Dictionary<string, Localization> localizations = new();
+	internal static void LocalizationPostfix(Localization __instance, string language) => LocalizationManager.SharedLocalizationCache.Track(__instance, language);
 
-		internal static void LocalizationPostfix(Localization __instance, string language)
-		{
-			if (localizations.FirstOrDefault(l => l.Value == __instance).Key is { } oldValue)
-			{
-				localizations.Remove(oldValue);
-			}
-			if (!localizations.ContainsKey(language))
-			{
-				localizations.Add(language, __instance);
-			}
-		}
+		public static Localization ForLanguage(string? language = null) => LocalizationManager.SharedLocalizationCache.ForLanguage(language);
 
-		public static Localization ForLanguage(string? language = null)
-		{
-			if (localizations.TryGetValue(language ?? PlayerPrefs.GetString("language", "English"), out Localization localization))
-			{
-				return localization;
-			}
-			localization = new Localization();
-			if (language is not null)
-			{
-				localization.SetupLanguage(language);
-			}
-			return localization;
-		}
+		public static string LocalizeForConfig(string token, string preferredLanguage = "English") =>
+			LocalizationManager.SharedLocalizationCache.LocalizeForConfig(token, preferredLanguage);
 	}
 
 	[PublicAPI]
@@ -225,12 +216,15 @@ public class Skill
 	{
 		Harmony harmony = new("org.bepinex.helpers.skillmanager");
 		harmony.Patch(AccessTools.DeclaredMethod(typeof(FejdStartup), nameof(FejdStartup.Awake)), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Skill), nameof(Patch_FejdStartup))));
+		harmony.Patch(AccessTools.DeclaredMethod(typeof(ZNet), nameof(ZNet.Awake)), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Skill), nameof(Patch_ZNet_Awake))));
+		harmony.Patch(AccessTools.DeclaredMethod(typeof(Skills), nameof(Skills.Awake)), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Skill), nameof(Patch_Skills_Awake))));
 		harmony.Patch(AccessTools.DeclaredMethod(typeof(Skills), nameof(Skills.GetSkillDef)), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Skill), nameof(Patch_Skills_GetSkillDef))));
+		harmony.Patch(AccessTools.DeclaredMethod(typeof(Skills), nameof(Skills.Load)), prefix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Skill), nameof(Patch_Skills_Load_Prefix))), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Skill), nameof(Patch_Skills_Load_Postfix))));
+		harmony.Patch(AccessTools.DeclaredMethod(typeof(Skills), nameof(Skills.IsSkillValid)), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Skill), nameof(Patch_Skills_IsSkillValid))));
 		harmony.Patch(AccessTools.DeclaredMethod(typeof(Skills), nameof(Skills.CheatRaiseSkill)), new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Skill), nameof(Patch_Skills_CheatRaiseskill))));
 		harmony.Patch(AccessTools.DeclaredMethod(typeof(Skills), nameof(Skills.CheatResetSkill)), new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Skill), nameof(Patch_Skills_CheatResetSkill))));
 		harmony.Patch(AccessTools.DeclaredMethod(typeof(Localization), nameof(Localization.LoadCSV)), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(LocalizeKey), nameof(LocalizeKey.AddLocalizedKeys))));
 		harmony.Patch(AccessTools.DeclaredMethod(typeof(Terminal), nameof(Terminal.InitTerminal)), new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Skill), nameof(Patch_Terminal_InitTerminal_Prefix))), new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Skill), nameof(Patch_Terminal_InitTerminal))));
-		harmony.Patch(AccessTools.DeclaredMethod(typeof(Localization), nameof(Localization.SetupLanguage)), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(LocalizationCache), nameof(LocalizationCache.LocalizationPostfix))));
 		harmony.Patch(AccessTools.DeclaredMethod(typeof(Skills), nameof(Skills.OnDeath)), new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Skill), nameof(Patch_Skills_OnDeath_Prefix))), finalizer: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Skill), nameof(Patch_Skills_OnDeath_Finalizer))));
 	}
 
@@ -239,29 +233,153 @@ public class Skill
 		[UsedImplicitly] public string? Category;
 	}
 
-	private static void Patch_FejdStartup()
+	private static bool configBindingsInitialized;
+	private const string RequiredExperienceFormulaDescription = "Required EXP per level follows: ((current level + 1)^1.5) / 2 + 0.5.";
+
+	private static bool IsEnchantmentSkill(Skill skill) => string.Equals(skill.internalSkillName, "kg_Enchantment", StringComparison.Ordinal);
+
+	private static string GetConfigGroup(Skill skill) => IsEnchantmentSkill(skill) ? "Enchantment" : skill.internalSkillName;
+
+	private static string GetConfigCategory(Skill skill, string localizedName) => IsEnchantmentSkill(skill) ? "Enchantment" : localizedName;
+
+	private static string GetSkillKeyDescription(string skillKey) => $"Skill key: {skillKey}.";
+
+	private static string GetLocalizedDisplayName(string token, string fallback)
 	{
+		if (Localization.instance == null)
+		{
+			return fallback;
+		}
+
+		string localized = Localization.instance.Localize(token).Trim();
+		return string.IsNullOrWhiteSpace(localized) ? fallback : localized;
+	}
+
+	private static void Patch_FejdStartup() => EnsureConfigBindings();
+
+	private static void Patch_ZNet_Awake() => EnsureConfigBindings();
+
+	private static void Patch_Skills_Awake(Skills __instance) => EnsureSkillDefinitions(__instance);
+
+	private static void EnsureSkillDefinitions(Skills? skillComponent)
+	{
+		if (skillComponent == null)
+		{
+			return;
+		}
+
+		foreach (Skill customSkill in skills.Values)
+		{
+			if (skillComponent.m_skills.Any(skillDef => skillDef?.m_skill == customSkill.skillDef.m_skill))
+			{
+				continue;
+			}
+
+			skillComponent.m_skills.Add(customSkill.skillDef);
+		}
+	}
+
+	private static Dictionary<Skills.SkillType, SavedSkillState>? CaptureCustomSkillStates(ZPackage? pkg)
+	{
+		if (pkg == null || skills.Count == 0)
+		{
+			return null;
+		}
+
+		try
+		{
+			ZPackage copy = new(pkg.GetArray());
+			copy.SetPos(pkg.GetPos());
+
+			int version = copy.ReadInt();
+			int count = copy.ReadInt();
+			Dictionary<Skills.SkillType, SavedSkillState>? capturedStates = null;
+			for (int i = 0; i < count; i++)
+			{
+				Skills.SkillType skillType = (Skills.SkillType)copy.ReadInt();
+				float level = copy.ReadSingle();
+				float accumulator = version >= 2 ? copy.ReadSingle() : 0f;
+
+				if (!skills.ContainsKey(skillType))
+				{
+					continue;
+				}
+
+				capturedStates ??= new Dictionary<Skills.SkillType, SavedSkillState>();
+				capturedStates[skillType] = new SavedSkillState(level, accumulator);
+			}
+
+			return capturedStates;
+		}
+		catch
+		{
+			return null;
+		}
+	}
+
+	private static void RestoreCustomSkillStates(Skills? skillComponent, Dictionary<Skills.SkillType, SavedSkillState>? capturedStates)
+	{
+		if (skillComponent == null || capturedStates == null || capturedStates.Count == 0)
+		{
+			return;
+		}
+
+		EnsureSkillDefinitions(skillComponent);
+
+		foreach (KeyValuePair<Skills.SkillType, SavedSkillState> entry in capturedStates)
+		{
+			Skills.Skill skill = skillComponent.GetSkill(entry.Key);
+			skill.m_level = entry.Value.Level;
+			skill.m_accumulator = entry.Value.Accumulator;
+		}
+	}
+
+	private static void Patch_Skills_Load_Prefix(Skills __instance, ZPackage pkg, out Dictionary<Skills.SkillType, SavedSkillState>? __state)
+	{
+		EnsureSkillDefinitions(__instance);
+		__state = CaptureCustomSkillStates(pkg);
+	}
+
+	private static void Patch_Skills_Load_Postfix(Skills __instance, Dictionary<Skills.SkillType, SavedSkillState>? __state)
+	{
+		RestoreCustomSkillStates(__instance, __state);
+	}
+
+	private static void EnsureConfigBindings()
+	{
+		if (configBindingsInitialized)
+		{
+			return;
+		}
+
 		foreach (Skill skill in skills.Values)
 		{
 			if (skill.Configurable)
 			{
 				string nameKey = skill.Name.Key;
-				string englishName = new Regex("['[\"\\]]").Replace(english.Localize(nameKey), "").Trim();
-				string localizedName = Localization.instance.Localize(nameKey).Trim();
+				string englishName = new Regex("['[\"\\]]").Replace(LocalizationCache.LocalizeForConfig(nameKey), "").Trim();
+				string localizedName = GetLocalizedDisplayName(nameKey, englishName);
+				string configGroup = GetConfigGroup(skill);
+				string configCategory = GetConfigCategory(skill, localizedName);
 
-				ConfigEntry<float> skillGain = config(englishName, "Skill gain factor", skill.SkillGainFactor, new ConfigDescription("The rate at which you gain experience for the skill.", new AcceptableValueRange<float>(0.01f, 5f), new ConfigurationManagerAttributes { Category = localizedName }));
+				ConfigEntry<float> skillGain = config(configGroup, "Skill gain factor", skill.SkillGainFactor, new ConfigDescription($"The rate at which you gain experience for the skill. {GetSkillKeyDescription(nameKey)} {RequiredExperienceFormulaDescription}", new AcceptableValueRange<float>(0.01f, 5f), new ConfigurationManagerAttributes { Category = configCategory }));
 				skill.SkillGainFactor = skillGain.Value;
 				skillGain.SettingChanged += (_, _) => skill.SkillGainFactor = skillGain.Value;
 
-				ConfigEntry<float> skillEffect = config(englishName, "Skill effect factor", skill.SkillEffectFactor, new ConfigDescription("The power of the skill, based on the default power.", new AcceptableValueRange<float>(0.01f, 5f), new ConfigurationManagerAttributes { Category = localizedName }));
-				skill.SkillEffectFactor = skillEffect.Value;
-				skillEffect.SettingChanged += (_, _) => skill.SkillEffectFactor = skillEffect.Value;
+				if (!IsEnchantmentSkill(skill))
+				{
+					ConfigEntry<float> skillEffect = config(configGroup, "Skill effect factor", skill.SkillEffectFactor, new ConfigDescription("The power of the skill, based on the default power.", new AcceptableValueRange<float>(0.01f, 5f), new ConfigurationManagerAttributes { Category = configCategory }));
+					skill.SkillEffectFactor = skillEffect.Value;
+					skillEffect.SettingChanged += (_, _) => skill.SkillEffectFactor = skillEffect.Value;
+				}
 
-				ConfigEntry<int> skillLoss = config(englishName, "Skill loss", skill.skillLoss, new ConfigDescription("How much experience to lose on death.", new AcceptableValueRange<int>(0, 100), new ConfigurationManagerAttributes { Category = localizedName }));
+				ConfigEntry<int> skillLoss = config(configGroup, "Skill loss", skill.skillLoss, new ConfigDescription($"How much experience to lose on death. {GetSkillKeyDescription(nameKey)} {RequiredExperienceFormulaDescription}", new AcceptableValueRange<int>(0, 100), new ConfigurationManagerAttributes { Category = configCategory }));
 				skill.skillLoss = skillLoss.Value;
 				skillLoss.SettingChanged += (_, _) => skill.skillLoss = skillLoss.Value;
 			}
 		}
+
+		configBindingsInitialized = true;
 	}
 
 	private static void Patch_Skills_GetSkillDef(ref Skills.SkillDef? __result, List<Skills.SkillDef> ___m_skills, Skills.SkillType type)
@@ -375,20 +493,16 @@ public class Skill
 		return skillDetails.skillDef;
 	}
 
-	[HarmonyPatch(typeof(Skills), nameof(Skills.IsSkillValid))]
-	private static class Patch_Skills_IsSkillValid
+	private static void Patch_Skills_IsSkillValid(Skills.SkillType type, ref bool __result)
 	{
-		private static void Postfix(Skills.SkillType type, ref bool __result)
+		if (__result)
 		{
-			if (__result)
-			{
-				return;
-			}
+			return;
+		}
 
-			if (skills.ContainsKey(type))
-			{
-				__result = true;
-			}
+		if (skills.ContainsKey(type))
+		{
+			__result = true;
 		}
 	}
 
@@ -407,10 +521,6 @@ public class Skill
 	}
 
 	private static Sprite loadSprite(string name, int width, int height) => Sprite.Create(loadTexture(name), new Rect(0, 0, width, height), Vector2.zero);
-
-	private static Localization? _english;
-
-	private static Localization english => _english ??= LocalizationCache.ForLanguage("English");
 
 	private static BaseUnityPlugin? _plugin;
 	private static BaseUnityPlugin plugin => _plugin ??= (BaseUnityPlugin)BepInEx.Bootstrap.Chainloader.ManagerObject.GetComponent(Assembly.GetExecutingAssembly().DefinedTypes.First(t => t.IsClass && typeof(BaseUnityPlugin).IsAssignableFrom(t)));

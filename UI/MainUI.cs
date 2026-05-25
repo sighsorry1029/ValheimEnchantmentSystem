@@ -1,568 +1,287 @@
 using BepInEx.Bootstrap;
 using BepInEx.Configuration;
-using ItemDataManager;
-using ItemManager;
 using JetBrains.Annotations;
 using kg.ValheimEnchantmentSystem.Configs;
 using kg.ValheimEnchantmentSystem.Misc;
-using kg.ValheimEnchantmentSystem;
+using TMPro;
 using UnityEngine.Audio;
-using YamlDotNet.Core.Tokens;
 
 namespace kg.ValheimEnchantmentSystem.UI;
 
-[VES_Autoload(VES_Autoload.Priority.Normal)]
+[VES_Autoload(VES_Autoload.Priority.Normal, "OnInit", typeof(SyncedData))]
 public static class VES_UI
 {
-    private static bool IsVisible() => UI && UI.activeSelf;
+    private static AudioSource? AUsrc;
+    private static AudioClip _oneSecondClip = null!;
+    private static AudioClip _threeSecondClip = null!;
+    private static AudioClip _sixSecondClip = null!;
+    private static AudioClip _click = null!;
+    private static AudioClip _successSound = null!;
+    private static AudioClip _failSound = null!;
+    private static GameObject _completionVfxPrefab = null!;
+    private static Sprite _defaultQuestionMark = null!;
+    private static MainEnchantmentView? _view;
+    private static MainEnchantmentController? _controller;
+    private static Button? _enchantmentButton;
+    private static GameObject? _enchantmentBackground;
+    private static GameObject? _enchantmentButtonGamepadHint;
 
-    private static Action<ItemDrop.ItemData> OnItemSelect;
-    private static AudioSource AUsrc;
-    private static AudioClip _1sec;
-    private static AudioClip _3sec;
-    private static AudioClip _6sec;
-    
-    private static GameObject UI;
-    private static GameObject VFX1;
-    private static Sprite Default_QuestionMark;
+    public static ConfigEntry<int> _enchantmentAnimationDuration = null!;
+    private static ConfigEntry<GamepadShortcutButton> _gamepadShortcut = null!;
 
-    private static AudioClip Click;
-    private static AudioClip SuccessSound;
-    private static AudioClip FailSound;
+    private enum GamepadShortcutButton
+    {
+        Disabled,
+        JoyButtonA,
+        JoyButtonB,
+        JoyButtonX,
+        JoyButtonY,
+        JoyLBumper,
+        JoyRBumper,
+        JoyLTrigger,
+        JoyRTrigger,
+        JoyLStick,
+        JoyRStick,
+        JoyBack,
+        JoyStart,
+        JoyDPadUp,
+        JoyDPadDown,
+        JoyDPadLeft,
+        JoyDPadRight
+    }
 
-    private static Transform Item_Transform;
-    private static Text Item_Text;
-    private static Image Item_Icon;
-    private static Image Item_Visual;
-    private static Image Item_Trail;
+    public static bool IsVisible() => _controller?.IsVisible ?? false;
 
-    private static Transform Scroll_Transform;
-    private static Text Scroll_Text;
-    private static Image Scroll_Icon;
-    private static Image Scroll_Visual;
-    private static Image Scroll_Trail;
-
-    private static Transform UseBless_Transform;
-    private static Image UseBless_Icon;
-
-    private static Transform Start_Transform;
-    private static Text Start_Text;
-
-    private static Transform Progress_Transform;
-    private static Transform Progress_VFX;
-    private static Image Progress_Fill;
-    
-    private static Transform Chance_Transform;
-    private static Text Chance_Text;
-
-    private static float _itemStartX, _scrollStartX;
-    private static float _startY;
-    private static bool _useBless;
-    private static float _fillDistance;
-    private static ItemDrop.ItemData _currentItem;
-    private static bool _enchantProcessing;
-    private static float _enchantTimer;
-    private static bool _shouldReselect;
-
-    private static readonly Color VFX_Default_Bless = new Color32(161, 157, 0, 255);
-    private static readonly int Speed = Shader.PropertyToID("_Speed");
-
-    private static float TIMER_MAX;
-    
-
-    public static ConfigEntry<int> _enchantmentAnimationDuration;
-    
     [UsedImplicitly]
     private static void OnInit()
     {
-        if (ValheimEnchantmentSystem.NoGraphics) return;
+        if (ValheimEnchantmentSystem.NoGraphics)
+        {
+            return;
+        }
+
         _enchantmentAnimationDuration = ValheimEnchantmentSystem.ClientConfig(
-            "",
+            string.Empty,
             "EnchantmentAnimationDuration",
             1,
-            new ConfigDescription("Duration of the enchantment animation (1-5 seconds).", new AcceptableValueRange<int>(1, 5)));
-        _1sec = ValheimEnchantmentSystem._asset.LoadAsset<AudioClip>("kg_EnchantmentSound_Main_1");
-        _3sec = ValheimEnchantmentSystem._asset.LoadAsset<AudioClip>("kg_EnchantmentSound_Main_3");
-        _6sec = ValheimEnchantmentSystem._asset.LoadAsset<AudioClip>("kg_EnchantmentSound_Main_6");
-        UI = UnityEngine.Object.Instantiate(ValheimEnchantmentSystem._asset.LoadAsset<GameObject>("kg_EnchantmentUI"));
-        VFX1 = ValheimEnchantmentSystem._asset.LoadAsset<GameObject>("kg_EnchantmentUI_VFX1");
-        Default_QuestionMark = ValheimEnchantmentSystem._asset.LoadAsset<Sprite>("kg_EnchantmentQuestion");
-        Click = ValheimEnchantmentSystem._asset.LoadAsset<AudioClip>("kg_EnchantmentClick");
-        SuccessSound = ValheimEnchantmentSystem._asset.LoadAsset<AudioClip>("kg_EnchantmentSound_Success");
-        FailSound = ValheimEnchantmentSystem._asset.LoadAsset<AudioClip>("kg_EnchantmentSound_Fail");
-        UI.SetActive(false);
-        UnityEngine.Object.DontDestroyOnLoad(UI);
+            new ConfigDescription("Duration of the enchantment animation in seconds. Values outside 1-5 are clamped at runtime."));
+        _gamepadShortcut = ValheimEnchantmentSystem.ClientConfig(
+            "UI",
+            "GamepadShortcut",
+            GamepadShortcutButton.JoyButtonX,
+            new ConfigDescription("Controller shortcut assigned to the enchantment inventory button. Change this if it conflicts with repair; set to Disabled to remove the shortcut."));
+        _gamepadShortcut.SettingChanged += (_, _) => ApplyEnchantmentGamepadShortcut();
+        _oneSecondClip = ValheimEnchantmentSystem._asset.LoadAsset<AudioClip>("kg_EnchantmentSound_Main_1");
+        _threeSecondClip = ValheimEnchantmentSystem._asset.LoadAsset<AudioClip>("kg_EnchantmentSound_Main_3");
+        _sixSecondClip = ValheimEnchantmentSystem._asset.LoadAsset<AudioClip>("kg_EnchantmentSound_Main_6");
+        _completionVfxPrefab = ValheimEnchantmentSystem._asset.LoadAsset<GameObject>("kg_EnchantmentUI_VFX1");
+        _defaultQuestionMark = ValheimEnchantmentSystem._asset.LoadAsset<Sprite>("kg_EnchantmentQuestion");
+        _click = ValheimEnchantmentSystem._asset.LoadAsset<AudioClip>("kg_EnchantmentClick");
+        _successSound = ValheimEnchantmentSystem._asset.LoadAsset<AudioClip>("kg_EnchantmentSound_Success");
+        _failSound = ValheimEnchantmentSystem._asset.LoadAsset<AudioClip>("kg_EnchantmentSound_Fail");
 
-        Item_Transform = UI.transform.Find("Canvas/Background/Item");
-        Item_Text = Item_Transform.Find("Text").GetComponent<Text>();
-        Item_Icon = Item_Transform.Find("Icon").GetComponent<Image>();
-        Item_Visual = Item_Transform.Find("Visual").GetComponent<Image>();
-        Item_Trail = Item_Transform.Find("Trail").GetComponent<Image>();
+        GameObject uiRoot = UnityEngine.Object.Instantiate(ValheimEnchantmentSystem._asset.LoadAsset<GameObject>("kg_EnchantmentUI"));
+        uiRoot.SetActive(false);
+        UnityEngine.Object.DontDestroyOnLoad(uiRoot);
 
-        Scroll_Transform = UI.transform.Find("Canvas/Background/Scroll");
-        Scroll_Text = Scroll_Transform.Find("Text").GetComponent<Text>();
-        Scroll_Icon = Scroll_Transform.Find("Icon").GetComponent<Image>();
-        Scroll_Visual = Scroll_Transform.Find("Visual").GetComponent<Image>();
-        Scroll_Trail = Scroll_Transform.Find("Trail").GetComponent<Image>();
-        
-
-        UseBless_Transform = UI.transform.Find("Canvas/Background/UseBless");
-        UseBless_Icon = UseBless_Transform.Find("Icon").GetComponent<Image>();
-        UseBless_Transform.Find("Text").GetComponent<Text>().color = Color.yellow;
-
-        Start_Transform = UI.transform.Find("Canvas/Background/Start");
-        Start_Text = Start_Transform.Find("Text").GetComponent<Text>();
-
-        Progress_Transform = UI.transform.Find("Canvas/Background/Progress");
-        Progress_VFX = Progress_Transform.Find("VFX");
-        Progress_Fill = Progress_Transform.Find("Fill").GetComponent<Image>();
-
-        Chance_Transform = UI.transform.Find("Canvas/Background/Chance");
-        Chance_Text = Chance_Transform.Find("Text").GetComponent<Text>();
-        
-        _itemStartX = Item_Transform.GetComponent<RectTransform>().anchoredPosition.x;
-        _scrollStartX = Scroll_Transform.GetComponent<RectTransform>().anchoredPosition.x;
-        _startY = Scroll_Transform.GetComponent<RectTransform>().anchoredPosition.y;
-        _fillDistance = 300f;
-        OnItemSelect += SelectItem;
-        UseBless_Transform.GetComponent<Button>().onClick.AddListener(() =>
-        {
-            PlayClick();
-            UseBless_ButtonClick();
-        });
-        Start_Transform.GetComponent<Button>().onClick.AddListener(() =>
-        {
-            PlayClick();
-            Start_ButtonClick();
-        });
-        UI.transform.Find("Canvas/Background/Info").GetComponent<Button>().onClick.AddListener(() =>
-        {
-            PlayClick();
-            Info_UI.Show();
-        });
-        
-        Default();
-    }
-
-    private static void Start_ButtonClick()
-    {
-        if (_currentItem == null || !Player.m_localPlayer ||
-            !Player.m_localPlayer.m_inventory.ContainsItem(_currentItem))
-        {
-            Default();
-            return;
-        }
-
-        if (_shouldReselect)
-        {
-            bool oldUseBless = _useBless;
-            SelectItem(_currentItem);
-            if (_useBless != oldUseBless) UseBless_ButtonClick();
-            PlayClick();
-            return;
-        }
-
-
-        if (_enchantProcessing)
-        {
-            _enchantProcessing = false;
-            _enchantTimer = 0;
-
-            bool oldUseBless = _useBless;
-            SelectItem(_currentItem);
-            if (_useBless != oldUseBless) UseBless_ButtonClick();
-            AUsrc.Stop();
-        }
-        else
-        {
-            SyncedData.SingleReq singleReq = _useBless
-                ? SyncedData.GetReqs(_currentItem.m_dropPrefab.name).blessed_enchant_prefab
-                : SyncedData.GetReqs(_currentItem.m_dropPrefab.name).enchant_prefab;
-            if (singleReq == null || !singleReq.IsValid()) return;
-            GameObject prefab = ZNetScene.instance.GetPrefab(singleReq.prefab);
-            if (!prefab) return;
-            if (Utils.CustomCountItemsNoLevel(prefab.name) < singleReq.amount) return;
-
-
-            _enchantProcessing = true;
-            int animationDuration = Mathf.Clamp(_enchantmentAnimationDuration.Value, 1, 5);
-            TIMER_MAX = animationDuration;
-            _enchantTimer = TIMER_MAX;
-            Start_Text.text = "$enchantment_cancel".Localize();
-
-            Progress_Transform.gameObject.SetActive(true);
-            Progress_Fill.fillAmount = 0f;
-            Progress_VFX.GetComponent<RectTransform>().anchoredPosition = new Vector2(0f, 0f);
-            ParticleSystem progressVfx = Progress_VFX.GetComponent<ParticleSystem>();
-            ParticleSystem.MainModule progressVfxMain = progressVfx.main;
-            progressVfxMain.startColor = _useBless ? VFX_Default_Bless : Color.white;
-            Progress_Fill.transform.GetChild(0).GetComponent<Image>().color = _useBless ? Color.yellow : Color.white;
-            Item_Visual.color = Color.clear;
-            Scroll_Visual.color = Color.clear;
-            Chance_Transform.gameObject.SetActive(false);
-            
-            Item_Trail.material.SetFloat(Speed, 1f);
-            Scroll_Trail.material.SetFloat(Speed, 1f);
-
-            UseBless_Transform.gameObject.SetActive(false);
-
-            Item_Text.text = "";
-            Scroll_Text.text = "";
-            
-            AUsrc.Stop();
-            AUsrc.clip = animationDuration <= 1 ? _1sec : animationDuration <= 3 ? _3sec : _6sec;
-            AUsrc.Play();
-        }
+        _view = MainEnchantmentView.Attach(uiRoot);
+        _controller = new MainEnchantmentController(
+            _view,
+            _defaultQuestionMark,
+            _completionVfxPrefab,
+            _oneSecondClip,
+            _threeSecondClip,
+            _sixSecondClip,
+            _successSound,
+            _failSound,
+            () => AUsrc,
+            () => Mathf.Clamp(_enchantmentAnimationDuration.Value, 1, 5),
+            PlayClick,
+            Info_UI.Show,
+            Info_UI.IsVisible,
+            () => true);
+        OverlayUiHost.Register(new OverlayUiHost.PanelRegistration(
+            "Enchantment",
+            IsVisible,
+            blocksInventoryHide: IsVisible,
+            configureTooltipPrefab: tooltipPrefab => _controller?.ConfigureTooltipPrefab(tooltipPrefab),
+            onInventoryGuiAwake: HandleInventoryGuiAwake,
+            onInventoryGuiShow: HandleInventoryGuiShow));
     }
 
     public static void Update()
     {
-        if (!IsVisible()) return;
-        if (!Player.m_localPlayer)
-        {
-            Hide();
-            return;
-        }
-            
-        if (Input.GetKeyDown(KeyCode.Escape) && !Info_UI.IsVisible())
-        {
-            ValheimEnchantmentSystem._thistype.DelayedInvoke(Hide, 1);
-            return;
-        }
-
-        if (Input.GetKeyDown(KeyCode.Tab) && !_enchantProcessing && !_shouldReselect && !Info_UI.IsVisible())
-        {
-            PlayClick();
-            UseBless_ButtonClick();
-            return;
-        }
-
-        if ((Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return)) && !Info_UI.IsVisible())
-        {
-            Start_ButtonClick();
-            return;
-        }
-
-        if (!_enchantProcessing) return;
-        if (_currentItem == null || !Player.m_localPlayer.m_inventory.ContainsItem(_currentItem))
-        {
-            Hide();
-            return;
-        }
-
-        _enchantTimer -= Time.deltaTime;
-
-        if (_enchantTimer <= 0)
-        {
-            RectTransform Item_Rect = Item_Transform.GetComponent<RectTransform>();
-            Item_Rect.anchoredPosition = new Vector2(0, 0);
-            Item_Transform.localScale = new Vector3(1.4f, 1.4f, 1f);
-
-            _enchantProcessing = false;
-            _enchantTimer = 0;
-            Scroll_Transform.gameObject.SetActive(false);
-            Progress_Transform.gameObject.SetActive(false);
-
-            Enchantment_Core.Enchanted en = _currentItem.Data().GetOrCreate<Enchantment_Core.Enchanted>();
-            bool enchanted = en.Enchant(_useBless, SyncedData.BlessedScrollsPreventBreak.Value, out string msg);
-            string dropName = _currentItem.m_dropPrefab
-                ? _currentItem.m_dropPrefab.name
-                : Utils.GetPrefabNameByItemName(_currentItem.m_shared.m_name);
-            if (SyncedData.GetReqs(dropName) is { } reqs)
-            {
-                int exp = 0;
-                switch (reqs.enchant_prefab.prefab.ToString().Substring(reqs.enchant_prefab.prefab.Length - 2))
-                {
-                    case "_F":
-                        exp = 2;
-                        break;
-                    case "_D":
-                        exp = 7;
-                        break;
-                    case "_C":
-                        exp = 14;
-                        break;
-                    case "_B":
-                        exp = 23;
-                        break;
-                    case "_A":
-                        exp = 34;
-                        break;
-                    case "_S":
-                        exp = 47;
-                        break;
-                    default:
-                        break;
-                }
-                Utils.IncreaseSkillEXP(Enchantment_Skill.SkillType_Enchantment, exp);
-            }
-
-            Item_Text.text = msg;
-            Item_Text.color = enchanted ? Color.green : Color.red;
-            Item_Visual.color = enchanted ? Color.green : Color.red;
-            Color c = SyncedData.GetColor(en, out _, true).IncreaseColorLight().ToColorAlpha();
-            Item_Trail.color = c;
-            GameObject uifx = UnityEngine.Object.Instantiate(VFX1, Item_Transform.transform);
-            ParticleSystem uiFxParticle = uifx.GetComponent<ParticleSystem>();
-            ParticleSystem.MainModule uiFxMain = uiFxParticle.main;
-            uiFxMain.startColor = enchanted ? Color.green : Color.red;
-            AUsrc.PlayOneShot(enchanted ? SuccessSound : FailSound);
-            Item_Trail.material.SetFloat(Speed, 0.5f);
-            Scroll_Trail.material.SetFloat(Speed, 0.5f);
-
-            _shouldReselect = true;
-            Start_Transform.gameObject.SetActive(true);
-            Start_Text.text = "$enchantment_ok".Localize();
-        }
-        else
-        {
-            Progress_Fill.fillAmount = 1f - (_enchantTimer / TIMER_MAX);
-            Progress_VFX.GetComponent<RectTransform>().anchoredPosition =
-                new Vector2(_fillDistance * Progress_Fill.fillAmount, 0f);
-
-            if (_useBless)
-            {
-                Item_Visual.color = new Color(1f, 1f, 0f, Progress_Fill.fillAmount);
-                Scroll_Visual.color = new Color(1f, 1f, 0f, Progress_Fill.fillAmount);
-            }
-            else
-            {
-                Item_Visual.color = new Color(1f, 1f, 1f, Progress_Fill.fillAmount);
-                Scroll_Visual.color = new Color(1f, 1f, 1f, Progress_Fill.fillAmount);
-            }
-
-            RectTransform Item_Rect = Item_Transform.GetComponent<RectTransform>();
-            Item_Rect.anchoredPosition =
-                new Vector2(Mathf.Lerp(_itemStartX, 0f, Progress_Fill.fillAmount),
-                    Mathf.Lerp(_startY, 0f, Progress_Fill.fillAmount));
-            RectTransform Scroll_Rect = Scroll_Transform.GetComponent<RectTransform>();
-            Scroll_Rect.anchoredPosition =
-                new Vector2(Mathf.Lerp(_scrollStartX, 0f, Progress_Fill.fillAmount),
-                    Mathf.Lerp(_startY, 0f, Progress_Fill.fillAmount));
-                
-            Item_Transform.localScale = new Vector3(1f + Progress_Fill.fillAmount * 0.4f, 1f + Progress_Fill.fillAmount * 0.4f, 1f);
-            Scroll_Transform.localScale = new Vector3(1f + Progress_Fill.fillAmount * 0.4f, 1f + Progress_Fill.fillAmount * 0.4f, 1f);
-        }
-    }
-
-    private static void Default()
-    {
-        AUsrc?.Stop();
-        _currentItem = null;
-        _enchantProcessing = false;
-        _enchantTimer = 0;
-        _shouldReselect = false;
-
-        RectTransform Item_Rect = Item_Transform.GetComponent<RectTransform>();
-        Item_Rect.anchoredPosition = new Vector2(0, 0);
-        Item_Transform.gameObject.SetActive(true);
-        Item_Transform.localScale = new Vector3(1.4f,1.4f,1f);
-        Item_Text.text = "$enchantment_selectanitem".Localize();
-        Item_Text.color = Color.white;
-        Item_Icon.sprite = Default_QuestionMark;
-        Item_Visual.color = Color.clear;
-        Item_Trail.gameObject.SetActive(false);
-        Item_Trail.color = new Color(1f, 1f, 1f, 0.8f);
-        Item_Trail.material.SetFloat(Speed, 0.5f);
-
-        RectTransform Scroll_Rect = Scroll_Transform.GetComponent<RectTransform>();
-        Scroll_Rect.anchoredPosition = new Vector2(_scrollStartX, _startY);
-        Scroll_Transform.gameObject.SetActive(false);
-        Scroll_Transform.localScale = Vector3.one;
-        Scroll_Text.text = "$enchantment_noenchantitems".Localize();
-        Scroll_Text.color = Color.red;
-        Scroll_Icon.sprite = Default_QuestionMark;
-        Scroll_Visual.color = Color.clear;
-        Scroll_Trail.gameObject.SetActive(false);
-        Scroll_Trail.color = new Color(1f, 1f, 1f, 0.8f);
-        Scroll_Trail.material.SetFloat(Speed, 0.5f);
-
-        UseBless_Transform.gameObject.SetActive(false);
-        UseBless_Icon.gameObject.SetActive(false);
-        _useBless = false;
-        
-        Start_Transform.gameObject.SetActive(false);
-
-        Progress_Transform.gameObject.SetActive(false);
-        Progress_VFX.GetComponent<RectTransform>().anchoredPosition = new Vector2(0f, 0f);
-        Progress_Fill.fillAmount = 0f;
-        Progress_Fill.transform.GetChild(0).GetComponent<Image>().color = Color.clear;
-        ParticleSystem defaultProgressVfx = Progress_VFX.GetComponent<ParticleSystem>();
-        ParticleSystem.MainModule defaultProgressVfxMain = defaultProgressVfx.main;
-        defaultProgressVfxMain.startColor = Color.clear;
-        
-        Chance_Transform.gameObject.SetActive(false);
-    }
-
-    private static void UseBless_ButtonClick()
-    {
-        try
-        {
-            if (_currentItem == null) return;
-            Enchantment_Core.Enchanted en = _currentItem.Data().Get<Enchantment_Core.Enchanted>();
-
-            _useBless = !_useBless;
-
-            UseBless_Icon.gameObject.SetActive(_useBless ? true : false);
-            SetChanceLabel(en, _currentItem.m_shared.m_name.Localize());
-
-            SyncedData.EnchantmentReqs reqs = SyncedData.GetReqs(_currentItem.m_dropPrefab?.name);
-
-            SyncedData.SingleReq singleReq = _useBless ? reqs.blessed_enchant_prefab : reqs.enchant_prefab;
-            if (singleReq.IsValid())
-            {
-                GameObject enchant_item = ZNetScene.instance.GetPrefab(singleReq.prefab);
-                Scroll_Text.text = enchant_item.GetComponent<ItemDrop>().m_itemData.m_shared.m_name.Localize() + " <color=yellow>x" + singleReq.amount + "</color>";
-                Scroll_Text.color = Utils.CustomCountItemsNoLevel(singleReq.prefab) >= singleReq.amount ? Color.white : Color.red;
-                Scroll_Icon.sprite = enchant_item.GetComponent<ItemDrop>().m_itemData.GetIcon();
-                Scroll_Trail.gameObject.SetActive(true);
-                Scroll_Trail.color = _useBless ? new Color(1f, 1f, 0f, 0.8f) : new Color(1f, 1f, 1f, 0.8f);
-            }
-            else
-            {
-                Scroll_Text.text = "$enchantment_noenchantitems".Localize();
-                Scroll_Text.color = Color.red;
-                Scroll_Icon.sprite = Default_QuestionMark;
-                Scroll_Trail.gameObject.SetActive(false);
-                Scroll_Trail.color = new Color(1f, 1f, 1f, 0.8f);
-            }
-        }
-        catch (Exception)
-        {
-            throw;
-        }        
-    }
-
-    private static void SelectItem(ItemDrop.ItemData item)
-    {
-        if (!IsVisible() || _enchantProcessing || item == null) return;
-        Default();
-        InventoryGui.instance.SetupDragItem(null, null, 1);
-        if (!Player.m_localPlayer.m_inventory.ContainsItem(item)) return;
-        SyncedData.EnchantmentReqs reqs = SyncedData.GetReqs(item.m_dropPrefab?.name);
-        if (reqs == null) return;
-
-        if (!Other_Mods_APIs.CanEnchant(item, out string msg))
-        {
-            Item_Text.text = msg;
-            Item_Text.color = Color.red;
-            return;
-        }
-
-        int enchantSkillLvl = (int)Player.m_localPlayer.GetSkillLevel(Enchantment_Skill.SkillType_Enchantment); // Get the enchantment skill level and compare it with the required skill level
-        if (enchantSkillLvl < reqs.required_skill)
-        {
-            msg = "$enchantment_missingskill".Localize(item.m_shared.m_name.Localize(), reqs.required_skill.ToString(), enchantSkillLvl.ToString());
-            Item_Text.text = msg;
-            Item_Text.color = Color.red;
-            return;
-        }
-
-        Enchantment_Core.Enchanted en = item.Data().Get<Enchantment_Core.Enchanted>();
-        if (en && !SyncedData.IsLevelEnchantable(item.m_dropPrefab.name, en.level, item.IsWeapon())) return;
-
-        _currentItem = item;
-
-        RectTransform Item_Rect = Item_Transform.GetComponent<RectTransform>();
-        Item_Rect.anchoredPosition = new Vector2(_itemStartX, _startY);
-        Item_Transform.gameObject.SetActive(true);
-        Item_Transform.localScale = Vector3.one;
-        string itemName = item.m_shared.m_name.Localize();
-        Item_Trail.gameObject.SetActive(true);
-        Chance_Transform.gameObject.SetActive(true);
-        
-        itemName = SetChanceLabel(en, itemName);
-
-        Item_Text.text = itemName;
-        Item_Icon.sprite = item.GetIcon();
-
-        UseBless_Transform.gameObject.SetActive(true);
-        UseBless_Icon.gameObject.SetActive(false);
-
-
-        RectTransform Scroll_Rect = Scroll_Transform.GetComponent<RectTransform>();
-        Scroll_Rect.anchoredPosition = new Vector2(_scrollStartX, _startY);
-        Scroll_Transform.gameObject.SetActive(true);
-        Scroll_Trail.gameObject.SetActive(true);
-        if (reqs.enchant_prefab.IsValid())
-        {
-            GameObject enchant_item = ZNetScene.instance.GetPrefab(reqs.enchant_prefab.prefab);
-            Scroll_Text.text = enchant_item.GetComponent<ItemDrop>().m_itemData.m_shared.m_name.Localize() + " <color=yellow>x" + reqs.enchant_prefab.amount + "</color>";
-            Scroll_Icon.sprite = enchant_item.GetComponent<ItemDrop>().m_itemData.GetIcon();
-            Scroll_Text.color = Utils.CustomCountItemsNoLevel(reqs.enchant_prefab.prefab) >= reqs.enchant_prefab.amount ? Color.white : Color.red;
-            Start_Transform.gameObject.SetActive(true);
-            Start_Text.text = "$enchantment_enchant".Localize();
-            Scroll_Trail.color = new Color(1f, 1f, 1f, 0.8f);
-        }
-        else
-        {
-            Scroll_Text.text = "$enchantment_noenchantitems".Localize();
-            Scroll_Text.color = Color.red;
-            Scroll_Icon.sprite = Default_QuestionMark;
-            Scroll_Trail.gameObject.SetActive(false);
-            Scroll_Trail.color = new Color(1f, 1f, 1f, 0.8f);
-        }
-    }
-
-    private static string SetChanceLabel(Enchantment_Core.Enchanted en, string itemName)
-    {
-        int level = en ? en.level : 0;
-        string color = SyncedData.GetColor(_currentItem.m_dropPrefab?.name, level, out _, true).IncreaseColorLight();
-        Color cColor = color.ToColorAlpha();
-        itemName += $" (<color={color}>+{level}</color>)";
-        Item_Trail.color = cColor;
-        if (level == 0) Item_Trail.color = new Color(1f, 1f, 1f, 0.8f);
-
-        double chance = (SyncedData.GetEnchantmentChance(_currentItem.m_dropPrefab?.name, level, _currentItem.IsWeapon()).success + SyncedData.GetAdditionalEnchantmentChance()).RoundOne();
-        if (!SyncedData.BlessedScrollsPreventBreak.Value && _useBless)
-        {
-            Int32.TryParse(SyncedData.BlessedScrollsAdditionalChance.Value.ToString(), out int addedChance);
-            chance += addedChance;
-        }
-        if (chance > 100) chance = 100;
-        Chance_Text.text = $"{chance}%";
-
-        return itemName;
+        _controller?.Update();
     }
 
     private static void Show()
     {
-        Default();
-        if (!InventoryGui.IsVisible())
-            InventoryGui.instance.Show(null);
-
-        // Localize UI when showing (in case it wasn't ready during OnInit)
-        if (Localization.instance != null)
-        {
-            UI.transform.Find("Canvas/Header/Text").GetComponent<Text>().text = "$enchantment_header".Localize();
-            UseBless_Transform.Find("Text").GetComponent<Text>().text = "$enchantment_usebless".Localize();
-        }
-
-        UI.SetActive(true);
+        _controller?.Show();
     }
 
     private static void Hide()
     {
-        UI.SetActive(false);
-        Default();
+        _controller?.Hide();
     }
 
-    public static void PlayClick() => AUsrc.PlayOneShot(Click);
-
-    [HarmonyPatch(typeof(TextInput), nameof(TextInput.IsVisible))]
-    [ClientOnlyPatch]
-    private static class TextInput_IsVisible_Patch
+    private static void HandleInventoryGuiAwake(InventoryGui inventoryGui)
     {
-        [UsedImplicitly]
-        private static void Postfix(ref bool __result) => __result |= IsVisible();
+        if (_enchantmentButton != null)
+        {
+            return;
+        }
+
+        if (inventoryGui.m_repairPanel.gameObject != inventoryGui.m_repairButton.gameObject)
+        {
+            _enchantmentBackground = UnityEngine.Object.Instantiate(inventoryGui.m_repairPanel.gameObject);
+            _enchantmentBackground.transform.SetParent(inventoryGui.m_repairPanel.transform.parent, false);
+            RectTransform rectTransform = _enchantmentBackground.GetComponent<RectTransform>();
+            rectTransform.anchoredPosition += new Vector2(0, 74);
+            _enchantmentBackground.transform.SetAsFirstSibling();
+        }
+        else
+        {
+            _enchantmentBackground = new GameObject("enchantment_menu_background");
+        }
+
+        _enchantmentButton = UnityEngine.Object.Instantiate(inventoryGui.m_repairButton.gameObject).GetComponent<Button>();
+        _enchantmentButton.transform.SetParent(inventoryGui.m_repairButton.transform.parent, false);
+        _enchantmentButton.name = "enchantment_menu";
+        _enchantmentButton.onClick.RemoveAllListeners();
+        _enchantmentButton.onClick.AddListener(() =>
+        {
+            if (IsVisible())
+            {
+                Hide();
+            }
+            else
+            {
+                Show();
+            }
+
+            PlayClick();
+        });
+
+        RectTransform rect = _enchantmentButton.GetComponent<RectTransform>();
+        rect.anchoredPosition += new Vector2(0, 74);
+        UIBindingHelper.FindOptional(_enchantmentButton.transform, "Glow")?.gameObject.SetActive(false);
+        _enchantmentButton.gameObject.SetActive(true);
+        UIBindingHelper.GetRequired<Image>(_enchantmentButton.transform, "Image").sprite =
+            ValheimEnchantmentSystem._asset.LoadAsset<Sprite>("kg_Enchantment_Icon");
+        ApplyEnchantmentGamepadShortcut();
     }
 
-    [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.IsVisible))]
-    [ClientOnlyPatch]
-    private static class StoreGui_IsVisible_Patch
+    private static void HandleInventoryGuiShow()
     {
-        [UsedImplicitly]
-        private static void Postfix(ref bool __result) => __result |= IsVisible();
+        if (!Player.m_localPlayer)
+        {
+            return;
+        }
+
+        if (Localization.instance != null && _enchantmentButton != null)
+        {
+            _enchantmentButton.GetComponent<UITooltip>().m_text = "$enchantment_menu".Localize();
+        }
+
+        _enchantmentBackground?.SetActive(true);
+        _enchantmentButton?.gameObject.SetActive(true);
+        ApplyEnchantmentGamepadShortcut();
+    }
+
+    private static void ApplyEnchantmentGamepadShortcut()
+    {
+        if (_enchantmentButton == null || _gamepadShortcut == null)
+        {
+            return;
+        }
+
+        UIGamePad gamepad = _enchantmentButton.GetComponent<UIGamePad>();
+        if (gamepad == null)
+        {
+            return;
+        }
+
+        if (_enchantmentButtonGamepadHint == null && gamepad.m_hint != null)
+        {
+            _enchantmentButtonGamepadHint = gamepad.m_hint;
+        }
+
+        string zinputKey = ToZInputKey(_gamepadShortcut.Value);
+        gamepad.m_zinputKey = zinputKey;
+        gamepad.m_keyCode = KeyCode.None;
+        gamepad.m_hint = string.IsNullOrEmpty(zinputKey) ? null : _enchantmentButtonGamepadHint;
+        UpdateGamepadHint(gamepad.m_hint, zinputKey);
+    }
+
+    private static string ToZInputKey(GamepadShortcutButton button)
+    {
+        return button == GamepadShortcutButton.Disabled ? string.Empty : button.ToString();
+    }
+
+    private static void UpdateGamepadHint(GameObject? hint, string zinputKey)
+    {
+        if (hint == null)
+        {
+            return;
+        }
+
+        if (string.IsNullOrEmpty(zinputKey))
+        {
+            hint.SetActive(false);
+            return;
+        }
+
+        string label = ResolveGamepadShortcutLabel(zinputKey);
+        foreach (Text text in hint.GetComponentsInChildren<Text>(true))
+        {
+            text.text = label;
+        }
+
+        foreach (TMP_Text text in hint.GetComponentsInChildren<TMP_Text>(true))
+        {
+            text.text = label;
+        }
+    }
+
+    private static string ResolveGamepadShortcutLabel(string zinputKey)
+    {
+        try
+        {
+            string label = ZInput.instance.GetBoundKeyString(zinputKey, true);
+            return string.IsNullOrWhiteSpace(label) ? zinputKey : label;
+        }
+        catch
+        {
+            return zinputKey;
+        }
+    }
+
+    public static void PlayClick()
+    {
+        if (AUsrc != null && _click != null)
+        {
+            AUsrc.PlayOneShot(_click);
+        }
+    }
+
+    private static AudioSource EnsureAudioSource(AudioMixerGroup sfxGroup)
+    {
+        if (AUsrc == null)
+        {
+            AUsrc = Chainloader.ManagerObject.GetComponent<AudioSource>();
+            if (AUsrc == null)
+            {
+                AUsrc = Chainloader.ManagerObject.AddComponent<AudioSource>();
+            }
+        }
+
+        AUsrc.reverbZoneMix = 0f;
+        AUsrc.spatialBlend = 0f;
+        AUsrc.bypassListenerEffects = true;
+        AUsrc.bypassEffects = true;
+        AUsrc.volume = 1f;
+        AUsrc.outputAudioMixerGroup = sfxGroup;
+        return AUsrc;
     }
 
     [HarmonyPatch(typeof(AudioMan), nameof(AudioMan.Awake))]
@@ -572,102 +291,31 @@ public static class VES_UI
         [UsedImplicitly]
         private static void Postfix(AudioMan __instance)
         {
-            AudioMixerGroup SFXgroup = __instance.m_masterMixer.FindMatchingGroups("SFX")[0];
-            AUsrc = Chainloader.ManagerObject.AddComponent<AudioSource>();
-            AUsrc.reverbZoneMix = 0;
-            AUsrc.spatialBlend = 0;
-            AUsrc.bypassListenerEffects = true;
-            AUsrc.bypassEffects = true;
-            AUsrc.volume = 1f;
-            AUsrc.outputAudioMixerGroup = SFXgroup;
+            AudioMixerGroup sfxGroup = __instance.m_masterMixer.FindMatchingGroups("SFX")[0];
+            EnsureAudioSource(sfxGroup);
 
             foreach (GameObject asset in ValheimEnchantmentSystem._asset.LoadAllAssets<GameObject>())
+            {
                 foreach (AudioSource audioSource in asset.GetComponentsInChildren<AudioSource>(true))
-                    audioSource.outputAudioMixerGroup = SFXgroup;
+                {
+                    audioSource.outputAudioMixerGroup = sfxGroup;
+                }
+            }
         }
     }
- 
+
     [HarmonyPatch(typeof(InventoryGui), nameof(InventoryGui.SetupDragItem))]
     [ClientOnlyPatch]
-    static class InventoryGui_SetupDragItem_Patch
+    private static class InventoryGui_SetupDragItem_Patch
     {
         [UsedImplicitly]
         private static void Postfix(InventoryGui __instance)
         {
             if (__instance.m_dragGo && __instance.m_dragItem != null)
             {
-                OnItemSelect(__instance.m_dragItem);
+                _controller?.HandleDraggedItem(__instance.m_dragItem);
             }
         }
     }
 
-    [HarmonyPatch(typeof(InventoryGui), nameof(InventoryGui.Awake))]
-    [ClientOnlyPatch]
-    private static class InventoryGui_Awake_Patch
-    {
-        public static Button _enchantmentButton;
-        public static GameObject _enchantmentBackground;
-
-        [UsedImplicitly]
-        private static void Postfix(InventoryGui __instance)
-        {
-            if (__instance.m_repairPanel.gameObject != __instance.m_repairButton.gameObject)
-            {
-                _enchantmentBackground = UnityEngine.Object.Instantiate(__instance.m_repairPanel.gameObject);
-                _enchantmentBackground.transform.SetParent(__instance.m_repairPanel.transform.parent, false);
-                RectTransform rectTransform = _enchantmentBackground.GetComponent<RectTransform>();
-                rectTransform.anchoredPosition += new Vector2(0, 74);
-                _enchantmentBackground.transform.SetAsFirstSibling();
-            }
-            else
-            {
-                _enchantmentBackground = new();
-            }
-            
-            _enchantmentButton = UnityEngine.Object.Instantiate(__instance.m_repairButton.gameObject).GetComponent<Button>();
-            _enchantmentButton.transform.SetParent(__instance.m_repairButton.transform.parent, false);
-            _enchantmentButton.name = "enchantment_menu";
-            _enchantmentButton.onClick.RemoveAllListeners();
-            _enchantmentButton.onClick.AddListener(() =>
-            {
-                if (IsVisible()) Hide();
-                else Show();
-                PlayClick();
-            });
-            RectTransform rect = _enchantmentButton.GetComponent<RectTransform>();
-            rect.anchoredPosition += new Vector2(0, 74);
-            _enchantmentButton.transform.Find("Glow")?.gameObject.SetActive(false);
-            _enchantmentButton.gameObject.SetActive(true);
-            _enchantmentButton.transform.Find("Image").GetComponent<Image>().sprite =
-                ValheimEnchantmentSystem._asset.LoadAsset<Sprite>("kg_Enchantment_Icon");
-        }
-    }
-
-    [HarmonyPatch(typeof(InventoryGui), nameof(InventoryGui.Show))]
-    [ClientOnlyPatch]
-    private static class InventoryGui_Show_Patch
-    {
-        [UsedImplicitly]
-        private static void Postfix(InventoryGui __instance)
-        {
-            if (!Player.m_localPlayer) return;
-
-            // Localize tooltip when inventory is shown
-            if (Localization.instance != null && InventoryGui_Awake_Patch._enchantmentButton != null)
-            {
-                InventoryGui_Awake_Patch._enchantmentButton.GetComponent<UITooltip>().m_text = "$enchantment_menu".Localize();
-            }
-
-            InventoryGui_Awake_Patch._enchantmentBackground.gameObject.SetActive(true);
-            InventoryGui_Awake_Patch._enchantmentButton.gameObject.SetActive(true);
-        }
-    }
-    
-    [HarmonyPatch(typeof(InventoryGui),nameof(InventoryGui.Hide))]
-    [ClientOnlyPatch]
-    private static class InventoryGui_Hide_Patch
-    {
-        [UsedImplicitly]
-        private static bool Prefix() => !IsVisible();
-    }
 }

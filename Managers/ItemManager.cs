@@ -1,4 +1,4 @@
-﻿﻿﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -414,15 +414,40 @@ public class Item
 	}
 
 	private static object? configManager;
+	private static PropertyInfo? configManagerDisplayingWindowProperty;
+	private static MethodInfo? configManagerBuildSettingListMethod;
+	private static long nextAllowedConfigRefreshTick;
+	private static bool configBindingsInitialized;
+	private const int ConfigRefreshDebounceMs = 100;
 
 	private delegate void setDmgFunc(ref HitData.DamageTypes dmg, float value);
 
 	internal static void reloadConfigDisplay()
 	{
-		if (configManager?.GetType().GetProperty("DisplayingWindow")!.GetValue(configManager) is true)
+		long nowTick = DateTime.UtcNow.Ticks / TimeSpan.TicksPerMillisecond;
+		if (nowTick < nextAllowedConfigRefreshTick)
 		{
-			configManager.GetType().GetMethod("BuildSettingList")!.Invoke(configManager, Array.Empty<object>());
+			return;
 		}
+
+		nextAllowedConfigRefreshTick = nowTick + ConfigRefreshDebounceMs;
+		if (configManagerDisplayingWindowProperty?.GetValue(configManager) is true)
+		{
+			configManagerBuildSettingListMethod?.Invoke(configManager, Array.Empty<object>());
+		}
+	}
+
+	private static string GetConfigGroup(string englishName, Item item) => string.IsNullOrWhiteSpace(englishName) ? item.Prefab.name : englishName;
+
+	private static string GetLocalizedDisplayName(string token, string fallback)
+	{
+		if (Localization.instance == null)
+		{
+			return fallback;
+		}
+
+		string localized = Localization.instance.Localize(token).Trim();
+		return string.IsNullOrWhiteSpace(localized) ? fallback : localized;
 	}
 
 	private void UpdateItemTableConfig(string recipeKey, CraftingTable table, string customTableValue)
@@ -457,8 +482,15 @@ public class Item
 		}
 	}
 
-	internal static void Patch_FejdStartup()
+	internal static void Patch_FejdStartup() => EnsureConfigBindings();
+
+	internal static void EnsureConfigBindings()
 	{
+		if (configBindingsInitialized)
+		{
+			return;
+		}
+
 		Assembly? bepinexConfigManager = AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => a.GetName().Name == "ConfigurationManager");
 
 		Type? configManagerType = bepinexConfigManager?.GetType("ConfigurationManager.ConfigurationManager");
@@ -471,8 +503,9 @@ public class Item
 			{
 				if (item.Prefab == null || item.Prefab.GetComponent<ItemDrop>() == null) continue;
 				string nameKey = item.Prefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_name;
-				string englishName = new Regex(@"[=\n\t\\""\'\[\]]*").Replace(english.Localize(nameKey), "").Trim();
-				string localizedName = Localization.instance.Localize(nameKey).Trim();
+				string englishName = new Regex(@"[=\n\t\\""\'\[\]]*").Replace(LocalizationCache.LocalizeForConfig(nameKey), "").Trim();
+				string configCategory = englishName;
+				string configGroup = GetConfigGroup(englishName, item);
 
 				int order = 0;
 
@@ -499,10 +532,10 @@ public class Item
 
 							List<ConfigurationManagerAttributes> hideWhenNoneAttributes = new();
 
-							cfg.table = config(englishName, "Crafting Station" + configSuffix, item.Recipes[configKey].Crafting.Stations.First().Table, new ConfigDescription($"Crafting station where {englishName} is available.", null, new ConfigurationManagerAttributes { Order = ++recipeOrder, Browsable = (item.configurationVisible & Configurability.Recipe) != 0, Category = localizedName }));
+							cfg.table = config(configGroup, "Crafting Station" + configSuffix, item.Recipes[configKey].Crafting.Stations.First().Table, new ConfigDescription($"Crafting station where {englishName} is available.", null, new ConfigurationManagerAttributes { Order = ++recipeOrder, Browsable = (item.configurationVisible & Configurability.Recipe) != 0, Category = configCategory }));
 							bool CustomTableBrowsability() => cfg.table.Value == CraftingTable.Custom;
-							ConfigurationManagerAttributes customTableAttributes = new() { Order = ++recipeOrder, browsability = CustomTableBrowsability, Browsable = CustomTableBrowsability() && (item.configurationVisible & Configurability.Recipe) != 0, Category = localizedName };
-							cfg.customTable = config(englishName, "Custom Crafting Station" + configSuffix, item.Recipes[configKey].Crafting.Stations.First().custom ?? "", new ConfigDescription("", null, customTableAttributes));
+							ConfigurationManagerAttributes customTableAttributes = new() { Order = ++recipeOrder, browsability = CustomTableBrowsability, Browsable = CustomTableBrowsability() && (item.configurationVisible & Configurability.Recipe) != 0, Category = configCategory };
+							cfg.customTable = config(configGroup, "Custom Crafting Station" + configSuffix, item.Recipes[configKey].Crafting.Stations.First().custom ?? "", new ConfigDescription("", null, customTableAttributes));
 
 							void TableConfigChanged(object o, EventArgs e)
 							{
@@ -518,9 +551,9 @@ public class Item
 							cfg.customTable.SettingChanged += TableConfigChanged;
 
 							bool TableLevelBrowsability() => cfg.table.Value != CraftingTable.Disabled;
-							ConfigurationManagerAttributes tableLevelAttributes = new() { Order = ++recipeOrder, browsability = TableLevelBrowsability, Browsable = TableLevelBrowsability() && (item.configurationVisible & Configurability.Recipe) != 0, Category = localizedName };
+							ConfigurationManagerAttributes tableLevelAttributes = new() { Order = ++recipeOrder, browsability = TableLevelBrowsability, Browsable = TableLevelBrowsability() && (item.configurationVisible & Configurability.Recipe) != 0, Category = configCategory };
 							hideWhenNoneAttributes.Add(tableLevelAttributes);
-							cfg.tableLevel = config(englishName, "Crafting Station Level" + configSuffix, item.Recipes[configKey].Crafting.Stations.First().level, new ConfigDescription($"Required crafting station level to craft {englishName}.", null, tableLevelAttributes));
+							cfg.tableLevel = config(configGroup, "Crafting Station Level" + configSuffix, item.Recipes[configKey].Crafting.Stations.First().level, new ConfigDescription($"Required crafting station level to craft {englishName}.", null, tableLevelAttributes));
 							cfg.tableLevel.SettingChanged += (_, _) =>
 							{
 								if (activeRecipes.ContainsKey(item) && activeRecipes[item].TryGetValue(configKey, out List<Recipe> recipes))
@@ -530,10 +563,10 @@ public class Item
 							};
 							if (item.Prefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_maxQuality > 1)
 							{
-								cfg.maximumTableLevel = config(englishName, "Maximum Crafting Station Level" + configSuffix, item.MaximumRequiredStationLevel == int.MaxValue ? item.Recipes[configKey].Crafting.Stations.First().level + item.Prefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_maxQuality - 1 : item.MaximumRequiredStationLevel, new ConfigDescription($"Maximum crafting station level to upgrade and repair {englishName}.", null, tableLevelAttributes));
+								cfg.maximumTableLevel = config(configGroup, "Maximum Crafting Station Level" + configSuffix, item.MaximumRequiredStationLevel == int.MaxValue ? item.Recipes[configKey].Crafting.Stations.First().level + item.Prefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_maxQuality - 1 : item.MaximumRequiredStationLevel, new ConfigDescription($"Maximum crafting station level to upgrade and repair {englishName}.", null, tableLevelAttributes));
 							}
 
-							cfg.craftAmount = config(englishName, "Craft Amount" + configSuffix, item.Recipes[configKey].CraftAmount, new ConfigDescription($"The number of items that should be given to the player with a single craft of {englishName}.", null, new ConfigurationManagerAttributes { Order = ++recipeOrder, Browsable = (item.configurationVisible & Configurability.Recipe) != 0, Category = localizedName }));
+							cfg.craftAmount = config(configGroup, "Craft Amount" + configSuffix, item.Recipes[configKey].CraftAmount, new ConfigDescription($"The number of items that should be given to the player with a single craft of {englishName}.", null, new ConfigurationManagerAttributes { Order = ++recipeOrder, Browsable = (item.configurationVisible & Configurability.Recipe) != 0, Category = configCategory }));
 							cfg.craftAmount.SettingChanged += (_, _) =>
 							{
 								if (activeRecipes.ContainsKey(item) && activeRecipes[item].TryGetValue(configKey, out List<Recipe> recipes))
@@ -546,8 +579,8 @@ public class Item
 							};
 
 							bool QualityResultBrowsability() => cfg.requireOneIngredient.Value == Toggle.On;
-							cfg.requireOneIngredient = config(englishName, "Require only one resource" + configSuffix, item.Recipes[configKey].RequireOnlyOneIngredient ? Toggle.On : Toggle.Off, new ConfigDescription($"Whether only one of the ingredients is needed to craft {englishName}", null, new ConfigurationManagerAttributes { Order = ++recipeOrder, Category = localizedName }));
-							ConfigurationManagerAttributes qualityResultAttributes = new() { Order = ++recipeOrder, browsability = QualityResultBrowsability, Browsable = QualityResultBrowsability() && (item.configurationVisible & Configurability.Recipe) != 0, Category = localizedName };
+							cfg.requireOneIngredient = config(configGroup, "Require only one resource" + configSuffix, item.Recipes[configKey].RequireOnlyOneIngredient ? Toggle.On : Toggle.Off, new ConfigDescription($"Whether only one of the ingredients is needed to craft {englishName}", null, new ConfigurationManagerAttributes { Order = ++recipeOrder, Category = configCategory }));
+							ConfigurationManagerAttributes qualityResultAttributes = new() { Order = ++recipeOrder, browsability = QualityResultBrowsability, Browsable = QualityResultBrowsability() && (item.configurationVisible & Configurability.Recipe) != 0, Category = configCategory };
 							cfg.requireOneIngredient.SettingChanged += (_, _) =>
 							{
 								if (activeRecipes.ContainsKey(item) && activeRecipes[item].TryGetValue(configKey, out List<Recipe> recipes))
@@ -560,7 +593,7 @@ public class Item
 								qualityResultAttributes.Browsable = QualityResultBrowsability();
 								reloadConfigDisplay();
 							};
-							cfg.qualityResultAmountMultiplier = config(englishName, "Quality Multiplier" + configSuffix, item.Recipes[configKey].QualityResultAmountMultiplier, new ConfigDescription($"Multiplies the crafted amount based on the quality of the resources when crafting {englishName}. Only works, if Require Only One Resource is true.", null, qualityResultAttributes));
+							cfg.qualityResultAmountMultiplier = config(configGroup, "Quality Multiplier" + configSuffix, item.Recipes[configKey].QualityResultAmountMultiplier, new ConfigDescription($"Multiplies the crafted amount based on the quality of the resources when crafting {englishName}. Only works, if Require Only One Resource is true.", null, qualityResultAttributes));
 							cfg.qualityResultAmountMultiplier.SettingChanged += (_, _) =>
 							{
 								if (activeRecipes.ContainsKey(item) && activeRecipes[item].TryGetValue(configKey, out List<Recipe> recipes))
@@ -575,9 +608,9 @@ public class Item
 							ConfigEntry<string> itemConfig(string name, string value, string desc, bool isUpgrade)
 							{
 								bool ItemBrowsability() => cfg.table.Value != CraftingTable.Disabled;
-								ConfigurationManagerAttributes attributes = new() { CustomDrawer = drawRequirementsConfigTable(item, isUpgrade), Order = ++recipeOrder, browsability = ItemBrowsability, Browsable = ItemBrowsability() && (item.configurationVisible & Configurability.Recipe) != 0, Category = localizedName };
+								ConfigurationManagerAttributes attributes = new() { CustomDrawer = drawRequirementsConfigTable(item, isUpgrade), Order = ++recipeOrder, browsability = ItemBrowsability, Browsable = ItemBrowsability() && (item.configurationVisible & Configurability.Recipe) != 0, Category = configCategory };
 								hideWhenNoneAttributes.Add(attributes);
-								return config(englishName, name, value, new ConfigDescription(desc, null, attributes));
+								return config(configGroup, name, value, new ConfigDescription(desc, null, attributes));
 							}
 
 							if ((!item.Recipes[configKey].RequiredItems.Free || item.Recipes[configKey].RequiredItems.Requirements.Count > 0) && item.Recipes[configKey].RequiredItems.Requirements.All(r => r.amountConfig is null))
@@ -607,7 +640,7 @@ public class Item
 
 					if ((item.configurability & Configurability.Drop) != 0)
 					{
-						ConfigEntry<string> dropConfig = itemDropConfigs[item] = config(englishName, "Drops from", new SerializedDrop(item.DropsFrom.Drops).ToString(), new ConfigDescription($"{englishName} drops from this creature.", null, new ConfigurationManagerAttributes { CustomDrawer = drawDropsConfigTable, Category = localizedName, Browsable = (item.configurationVisible & Configurability.Drop) != 0 }));
+						ConfigEntry<string> dropConfig = itemDropConfigs[item] = config(configGroup, "Drops from", new SerializedDrop(item.DropsFrom.Drops).ToString(), new ConfigDescription($"{englishName} drops from this creature.", null, new ConfigurationManagerAttributes { CustomDrawer = drawDropsConfigTable, Category = configCategory, Browsable = (item.configurationVisible & Configurability.Drop) != 0 }));
 						dropConfig.SettingChanged += (_, _) => item.UpdateCharacterDrop();
 					}
 
@@ -658,7 +691,7 @@ public class Item
 							}
 						}
 
-						conversion.config.input = config(englishName, $"{prefix}Conversion Input Item", conversion.Input, new ConfigDescription($"Input item to create {englishName}", null, new ConfigurationManagerAttributes { Category = localizedName, Browsable = (item.configurationVisible & Configurability.Recipe) != 0 }));
+						conversion.config.input = config(configGroup, $"{prefix}Conversion Input Item", conversion.Input, new ConfigDescription($"Input item to create {englishName}", null, new ConfigurationManagerAttributes { Category = configCategory, Browsable = (item.configurationVisible & Configurability.Recipe) != 0 }));
 						conversion.config.input.SettingChanged += (_, _) =>
 						{
 							if (index < item.conversions.Count && ObjectDB.instance is { } objectDB)
@@ -668,9 +701,9 @@ public class Item
 								UpdatePiece();
 							}
 						};
-						conversion.config.piece = config(englishName, $"{prefix}Conversion Piece", conversion.Piece, new ConfigDescription($"Conversion piece used to create {englishName}", null, new ConfigurationManagerAttributes { Category = localizedName, Browsable = (item.configurationVisible & Configurability.Recipe) != 0 }));
+						conversion.config.piece = config(configGroup, $"{prefix}Conversion Piece", conversion.Piece, new ConfigDescription($"Conversion piece used to create {englishName}", null, new ConfigurationManagerAttributes { Category = configCategory, Browsable = (item.configurationVisible & Configurability.Recipe) != 0 }));
 						conversion.config.piece.SettingChanged += (_, _) => UpdatePiece();
-						conversion.config.customPiece = config(englishName, $"{prefix}Conversion Custom Piece", conversion.customPiece ?? "", new ConfigDescription($"Custom conversion piece to create {englishName}", null, new ConfigurationManagerAttributes { Category = localizedName, Browsable = (item.configurationVisible & Configurability.Recipe) != 0 }));
+						conversion.config.customPiece = config(configGroup, $"{prefix}Conversion Custom Piece", conversion.customPiece ?? "", new ConfigDescription($"Custom conversion piece to create {englishName}", null, new ConfigurationManagerAttributes { Category = configCategory, Browsable = (item.configurationVisible & Configurability.Recipe) != 0 }));
 						conversion.config.customPiece.SettingChanged += (_, _) => UpdatePiece();
 					}
 				}
@@ -681,7 +714,7 @@ public class Item
 					void statcfg<T>(string configName, string description, Func<ItemDrop.ItemData.SharedData, T> readDefault, Action<ItemDrop.ItemData.SharedData, T> setValue)
 					{
 						ItemDrop.ItemData.SharedData shared = item.Prefab.GetComponent<ItemDrop>().m_itemData.m_shared;
-						ConfigEntry<T> cfg = config(englishName, configName, readDefault(shared), new ConfigDescription(description, null, new ConfigurationManagerAttributes { Category = localizedName, Browsable = (item.configurationVisible & Configurability.Stats) != 0 }));
+						ConfigEntry<T> cfg = config(configGroup, configName, readDefault(shared), new ConfigDescription(description, null, new ConfigurationManagerAttributes { Category = configCategory, Browsable = (item.configurationVisible & Configurability.Stats) != 0 }));
 						if ((item.configurationVisible & Configurability.Stats) != 0)
 						{
 							setValue(shared, cfg.Value);
@@ -828,7 +861,7 @@ public class Item
 
 					item.traderConfig = new TraderConfig
 					{
-						trader = config(englishName, "Trader Selling", item.Trade.Trader, new ConfigDescription($"Which traders sell {englishName}.", null, new ConfigurationManagerAttributes { Order = ++order, Browsable = (item.configurationVisible & Configurability.Trader) != 0, Category = localizedName })),
+						trader = config(configGroup, "Trader Selling", item.Trade.Trader, new ConfigDescription($"Which traders sell {englishName}.", null, new ConfigurationManagerAttributes { Order = ++order, Browsable = (item.configurationVisible & Configurability.Trader) != 0, Category = configCategory })),
 					};
 					item.traderConfig.trader.SettingChanged += (_, _) =>
 					{
@@ -842,9 +875,9 @@ public class Item
 
 					ConfigEntry<T> traderConfig<T>(string name, T value, string desc)
 					{
-						ConfigurationManagerAttributes attributes = new() { Order = ++order, browsability = TraderBrowsability, Browsable = TraderBrowsability() && (item.configurationVisible & Configurability.Trader) != 0, Category = localizedName };
+						ConfigurationManagerAttributes attributes = new() { Order = ++order, browsability = TraderBrowsability, Browsable = TraderBrowsability() && (item.configurationVisible & Configurability.Trader) != 0, Category = configCategory };
 						traderAttributes.Add(attributes);
-						ConfigEntry<T> cfg = config(englishName, name, value, new ConfigDescription(desc, null, attributes));
+						ConfigEntry<T> cfg = config(configGroup, name, value, new ConfigDescription(desc, null, attributes));
 						cfg.SettingChanged += (_, _) => item.ReloadTraderConfiguration();
 						return cfg;
 					}
@@ -870,9 +903,12 @@ public class Item
 				plugin.Config.Save();
 			}
 		}
-		configManager = configManagerType == null ? null : BepInEx.Bootstrap.Chainloader.ManagerObject.GetComponent(configManagerType);
 
-		foreach (Item item in registeredItems)
+			configManager = configManagerType == null ? null : BepInEx.Bootstrap.Chainloader.ManagerObject.GetComponent(configManagerType);
+			configManagerDisplayingWindowProperty = configManagerType?.GetProperty("DisplayingWindow");
+			configManagerBuildSettingListMethod = configManagerType?.GetMethod("BuildSettingList");
+
+			foreach (Item item in registeredItems)
 		{
 			foreach (KeyValuePair<string, ItemRecipe> kv in item.Recipes)
 			{
@@ -902,6 +938,9 @@ public class Item
 
 			item.InitializeNewRegisteredItem();
 		}
+
+		configBindingsInitialized = true;
+
 	}
 
 	private void InitializeNewRegisteredItem()
@@ -1070,6 +1109,8 @@ public class Item
 	[HarmonyPriority(Priority.Last)]
 	internal static void Patch_ObjectDBInit(ObjectDB __instance)
 	{
+		EnsureConfigBindings();
+
 		if (__instance.GetItemPrefab("YagluthDrop") == null)
 		{
 			return;
@@ -1761,9 +1802,6 @@ public class Item
 		}
 	}
 
-	private static Localization? _english;
-	private static Localization english => _english ??= LocalizationCache.ForLanguage("English");
-
 	private static BaseUnityPlugin? _plugin;
 
 	private static BaseUnityPlugin plugin
@@ -1895,33 +1933,12 @@ public class LocalizeKey
 
 public static class LocalizationCache
 {
-	private static readonly Dictionary<string, Localization> localizations = new();
+	internal static void LocalizationPostfix(Localization __instance, string language) => LocalizationManager.SharedLocalizationCache.Track(__instance, language);
 
-	internal static void LocalizationPostfix(Localization __instance, string language)
-	{
-		if (localizations.FirstOrDefault(l => l.Value == __instance).Key is { } oldValue)
-		{
-			localizations.Remove(oldValue);
-		}
-		if (!localizations.ContainsKey(language))
-		{
-			localizations.Add(language, __instance);
-		}
-	}
+	public static Localization ForLanguage(string? language = null) => LocalizationManager.SharedLocalizationCache.ForLanguage(language);
 
-	public static Localization ForLanguage(string? language = null)
-	{
-		if (localizations.TryGetValue(language ?? PlayerPrefs.GetString("language", "English"), out Localization localization))
-		{
-			return localization;
-		}
-		localization = new Localization();
-		if (language is not null)
-		{
-			localization.SetupLanguage(language);
-		}
-		return localization;
-	}
+	public static string LocalizeForConfig(string token, string preferredLanguage = "English") =>
+		LocalizationManager.SharedLocalizationCache.LocalizeForConfig(token, preferredLanguage);
 }
 
 [PublicAPI]
@@ -1945,7 +1962,6 @@ public static class PrefabManager
 		harmony.Patch(AccessTools.DeclaredMethod(typeof(Smelter), nameof(Smelter.OnAddFuel)), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Item), nameof(Item.Patch_OnAddSmelterInput))));
 		harmony.Patch(AccessTools.DeclaredMethod(typeof(Smelter), nameof(Smelter.OnAddOre)), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Item), nameof(Item.Patch_OnAddSmelterInput))));
 		harmony.Patch(AccessTools.DeclaredMethod(typeof(global::Trader), nameof(global::Trader.GetAvailableItems)), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Item), nameof(Item.Patch_TraderGetAvailableItems))));
-		harmony.Patch(AccessTools.DeclaredMethod(typeof(Localization), nameof(Localization.SetupLanguage)), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(LocalizationCache), nameof(LocalizationCache.LocalizationPostfix))));
 		harmony.Patch(AccessTools.DeclaredMethod(typeof(Localization), nameof(Localization.LoadCSV)), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(LocalizeKey), nameof(LocalizeKey.AddLocalizedKeys))));
 	}
 

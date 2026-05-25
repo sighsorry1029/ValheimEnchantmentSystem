@@ -1,18 +1,30 @@
-﻿﻿using System.Reflection.Emit;
+using System.Reflection.Emit;
 using System.Text.RegularExpressions;
 using ItemDataManager;
-using ItemManager;
 using JetBrains.Annotations;
 using kg.ValheimEnchantmentSystem.Configs;
+using kg.ValheimEnchantmentSystem.Integrations;
 using kg.ValheimEnchantmentSystem.Misc;
 using kg.ValheimEnchantmentSystem.UI;
-using Random = UnityEngine.Random;
 
 namespace kg.ValheimEnchantmentSystem;
 
-[VES_Autoload]
+[VES_Autoload(VES_Autoload.Priority.Last, "OnInit", typeof(SyncedData), typeof(Enchantment_Skill), typeof(IntegrationRegistry), typeof(Notifications_UI), typeof(Enchantment_VFX))]
 public static class Enchantment_Core
 {
+    private static readonly Regex ItemDurabilityRegex = new("(\\$item_durability.*)", RegexOptions.Compiled);
+    private static readonly Regex InventoryDamageRegex = new("(\\$inventory_damage.*)", RegexOptions.Compiled);
+    private static readonly Regex InventoryBluntRegex = new("(\\$inventory_blunt.*)", RegexOptions.Compiled);
+    private static readonly Regex InventorySlashRegex = new("(\\$inventory_slash.*)", RegexOptions.Compiled);
+    private static readonly Regex InventoryPierceRegex = new("(\\$inventory_pierce.*)", RegexOptions.Compiled);
+    private static readonly Regex InventoryFireRegex = new("(\\$inventory_fire.*)", RegexOptions.Compiled);
+    private static readonly Regex InventoryFrostRegex = new("(\\$inventory_frost.*)", RegexOptions.Compiled);
+    private static readonly Regex InventoryLightningRegex = new("(\\$inventory_lightning.*)", RegexOptions.Compiled);
+    private static readonly Regex InventoryPoisonRegex = new("(\\$inventory_poison.*)", RegexOptions.Compiled);
+    private static readonly Regex InventorySpiritRegex = new("(\\$inventory_spirit.*)", RegexOptions.Compiled);
+    private static readonly Regex ItemBlockArmorRegex = new("(\\$item_blockarmor.*)", RegexOptions.Compiled);
+    private static readonly Regex ItemArmorRegex = new("(\\$item_armor.*)", RegexOptions.Compiled);
+
     [UsedImplicitly]
     private static void OnInit()
     {
@@ -43,7 +55,6 @@ public static class Enchantment_Core
         public override void Save()
         {
             Value = level.ToString();
-            Enchantment_VFX.UpdateGrid();
         }
 
         public override void Load()
@@ -54,22 +65,7 @@ public static class Enchantment_Core
 
         public override void Upgraded()
         {
-            if (SyncedData.DropEnchantmentOnUpgrade.Value)
-            {
-                ValheimEnchantmentSystem._thistype.DelayedInvoke(() =>
-                {
-                    Item.Data().Remove<Enchanted>();
-                    Enchantment_VFX.UpdateGrid();
-                }, 1);
-            }
-            else
-            {
-                ValheimEnchantmentSystem._thistype.DelayedInvoke(() =>
-                {
-                    Other_Mods_APIs.ApplyAPIs_Upgraded(this);
-                    Enchantment_VFX.UpdateGrid();
-                }, 1);
-            }
+            EnchantmentSideEffects.HandleUpgrade(this);
         }
 
         public float GetEnchantmentChance()
@@ -77,147 +73,9 @@ public static class Enchantment_Core
             return SyncedData.GetEnchantmentChance(this).success;
         }
 
-        private SyncedData.Chance_Data GetEnchantmentChanceData()
+        public EnchantmentResult Enchant(Player player, bool useBlessedScroll, bool blessedScrollPreventsBreak)
         {
-            return SyncedData.GetEnchantmentChance(this);
-        }
-
-        private bool HaveReqs(bool bless)
-        {
-            SyncedData.SingleReq singleReq = bless
-                ? SyncedData.GetReqs(Item.m_dropPrefab.name).blessed_enchant_prefab
-                : SyncedData.GetReqs(Item.m_dropPrefab.name).enchant_prefab;
-            if (singleReq == null || !singleReq.IsValid()) return false;
-            GameObject prefab = ZNetScene.instance.GetPrefab(singleReq.prefab);
-            if (prefab == null) return false;
-            int count = Utils.CustomCountItemsNoLevel(prefab.name);
-            if (count >= singleReq.amount)
-            {
-                Utils.CustomRemoveItemsNoLevel(prefab.name, singleReq.amount);
-                return true;
-            }
-
-            return false;
-        }
-
-        private bool CanEnchant()
-        {
-            if (!SyncedData.IsLevelEnchantable(Item.m_dropPrefab.name, level, Item.IsWeapon())) return false;
-            SyncedData.EnchantmentReqs reqs = SyncedData.GetReqs(Item.m_dropPrefab.name);
-            return reqs != null;
-        }
-
-        private bool CheckRandom(bool useBless, bool preventBreak, out bool destroy)
-        {
-            float random = Random.Range(0f, 100f);
-            Int32.TryParse(SyncedData.BlessedScrollsAdditionalChance.Value.ToString(), out int addedChance);
-            SyncedData.Chance_Data chanceData = GetEnchantmentChanceData();
-            float additionalChance = SyncedData.GetAdditionalEnchantmentChance();
-            int reduceDestroyChance = useBless ? addedChance : 0;
-            destroy = chanceData.destroy > 0 && Random.Range(0f, 100f) <= chanceData.destroy - reduceDestroyChance;
-            float chance = chanceData.success + additionalChance;
-            if (useBless && !preventBreak)
-            {                
-                chance += addedChance;
-            }
-            return random <= chance;
-        }
-
-        public bool Enchant(bool safeEnchant, bool blessPreventBreak, out string msg)
-        {
-            msg = "";
-            if (!CanEnchant())
-            {
-                msg = "$enchantment_cannotbe".Localize();
-                return false;
-            }
-
-            if (!HaveReqs(safeEnchant))
-            {
-                msg = "$enchantment_nomaterials".Localize();
-                return false;
-            }
-            
-            int prevLevel = level;
-            if (CheckRandom(safeEnchant, blessPreventBreak, out bool destroy))
-            {
-                level++;
-                Save();
-                Other_Mods_APIs.ApplyAPIs(this);
-                ValheimEnchantmentSystem._thistype.StartCoroutine(FrameSkipEquip(Item));
-                msg = "$enchantment_success".Localize(Item.m_shared.m_name.Localize(), prevLevel.ToString(), level.ToString());
-                if (SyncedData.EnchantmentEnableNotifications.Value && SyncedData.EnchantmentNotificationMinLevel.Value <= level)
-                    Notifications_UI.AddNotification(Player.m_localPlayer.GetPlayerName(), Item.m_dropPrefab.name, (int)Notifications_UI.NotificationItemResult.Success, prevLevel, level);
-                return true;
-            }
-            
-            if (SyncedData.SafetyLevel.Value <= level && (!safeEnchant || (safeEnchant && !blessPreventBreak)))
-            {
-                Notifications_UI.NotificationItemResult notification;
-                switch (SyncedData.ItemFailureType.Value)
-                {
-                    case SyncedData.ItemDesctructionTypeEnum.LevelDecrease:
-                    default:
-                        level = Mathf.Max(0, level - 1);
-                        Save();
-                        Other_Mods_APIs.ApplyAPIs(this);
-                        ValheimEnchantmentSystem._thistype.StartCoroutine(FrameSkipEquip(Item));
-                        msg = "$enchantment_fail_leveldown".Localize(Item.m_shared.m_name.Localize(), prevLevel.ToString(), level.ToString());
-                        notification = Notifications_UI.NotificationItemResult.LevelDecrease;
-                        break;
-                    case SyncedData.ItemDesctructionTypeEnum.Destroy: 
-                        Player.m_localPlayer.UnequipItem(Item);
-                        Player.m_localPlayer.m_inventory.RemoveItem(Item);
-                        msg = "$enchantment_fail_destroyed".Localize(Item.m_shared.m_name.Localize());
-                        notification = Notifications_UI.NotificationItemResult.Destroyed;
-                        break;
-                    case SyncedData.ItemDesctructionTypeEnum.Combined:
-                        notification = destroy ? Notifications_UI.NotificationItemResult.Destroyed : Notifications_UI.NotificationItemResult.LevelDecrease;
-                        if (destroy)
-                        {
-                            Player.m_localPlayer.UnequipItem(Item);
-                            Player.m_localPlayer.m_inventory.RemoveItem(Item);
-                            msg = "$enchantment_fail_destroyed".Localize(Item.m_shared.m_name.Localize());
-                        }
-                        else
-                        {
-                            level = Mathf.Max(0, level - 1);
-                            Save();
-                            Other_Mods_APIs.ApplyAPIs(this);
-                            ValheimEnchantmentSystem._thistype.StartCoroutine(FrameSkipEquip(Item));
-                            msg = "$enchantment_fail_leveldown".Localize(Item.m_shared.m_name.Localize(), prevLevel.ToString(), level.ToString());
-                        }
-                        break;
-                    case SyncedData.ItemDesctructionTypeEnum.CombinedEasy:
-                        notification = Notifications_UI.NotificationItemResult.LevelDecrease;
-                        if (destroy)
-                        {
-                            level = Mathf.Max(0, level - 1);
-                            Save();
-                            Other_Mods_APIs.ApplyAPIs(this);
-                            ValheimEnchantmentSystem._thistype.StartCoroutine(FrameSkipEquip(Item));
-                            msg = "$enchantment_fail_leveldown".Localize(Item.m_shared.m_name.Localize(), prevLevel.ToString(), level.ToString());
-                        }
-                        else
-                        {
-                            msg = "$enchantment_fail_nochange".Localize(Item.m_shared.m_name.Localize(), level.ToString());
-                            Save();
-                        }
-                        break;
-                }
-                
-                if (SyncedData.EnchantmentEnableNotifications.Value && SyncedData.EnchantmentNotificationMinLevel.Value <= level)
-                    Notifications_UI.AddNotification(Player.m_localPlayer.GetPlayerName(), Item.m_dropPrefab.name, (int)notification, prevLevel, level);
-            }
-            else
-            {
-                msg = "$enchantment_fail_nochange".Localize(Item.m_shared.m_name.Localize(), level.ToString());
-                Save();
-                if (SyncedData.EnchantmentEnableNotifications.Value && SyncedData.EnchantmentNotificationMinLevel.Value <= level)
-                    Notifications_UI.AddNotification(Player.m_localPlayer.GetPlayerName(), Item.m_dropPrefab.name, (int)Notifications_UI.NotificationItemResult.LevelDecrease, prevLevel, level);
-            }
-            
-            return false;
+            return EnchantmentService.Execute(this, player, useBlessedScroll, blessedScrollPreventsBreak);
         }
         public static implicit operator bool(Enchanted en) => en != null;
     }
@@ -272,24 +130,24 @@ public static class Enchantment_Core
         [UsedImplicitly]
         public static void Postfix(ItemDrop.ItemData item, bool crafting, int qualityLevel, ref string __result)
         {
-            bool blockShowEnchant = false;
             Enchanted en = item.Data().Get<Enchanted>();
             int currentLevel = en ? en.level : 0;
             string dropName = item.m_dropPrefab ? item.m_dropPrefab.name : Utils.GetPrefabNameByItemName(item.m_shared.m_name);
             var reqs = SyncedData.GetReqs(dropName);
+            string statusLine = BuildTooltipStatusLine(reqs, dropName, currentLevel, item);
 
             if (currentLevel > 0)
             {
                 SyncedData.Stat_Data stats = SyncedData.GetStatIncrease(en);
                 string color = SyncedData.GetColor(en, out _, true).IncreaseColorLight();
                 
-                if (stats)
+                if (stats != null)
                 {
                     int damagePercent = stats.damage_percentage;
                     if (stats.durability > 0)
-                        __result = new Regex("(\\$item_durability.*)").Replace(__result, $"$1 (<color={color}>+{stats.durability}</color>)");
+                        __result = ItemDurabilityRegex.Replace(__result, $"$1 (<color={color}>+{stats.durability}</color>)");
                     if (stats.durability_percentage > 0)
-                        __result = new Regex("(\\$item_durability.*)").Replace(__result, $"$1 (<color={color}>+{stats.durability_percentage}%</color>)");
+                        __result = ItemDurabilityRegex.Replace(__result, $"$1 (<color={color}>+{stats.durability_percentage}%</color>)");
 
                     __result += "\n";
                     
@@ -297,78 +155,92 @@ public static class Enchantment_Core
                     {
                         Player.m_localPlayer.GetSkills().GetRandomSkillRange(out float minFactor, out float maxFactor, item.m_shared.m_skillType);
                         HitData.DamageTypes damage = item.GetDamage(qualityLevel, item.m_worldLevel);
-                        __result = new Regex("(\\$inventory_damage.*)").Replace(__result,
+                        __result = InventoryDamageRegex.Replace(__result,
                             $"$1 (<color={color}>+{(damage.m_damage * damagePercent / 100f * minFactor).RoundOne()} - {(damage.m_damage * damagePercent / 100f * maxFactor).RoundOne()}</color>)");
-                        __result = new Regex("(\\$inventory_blunt.*)").Replace(__result,
+                        __result = InventoryBluntRegex.Replace(__result,
                             $"$1 (<color={color}>+{(damage.m_blunt * damagePercent / 100f * minFactor).RoundOne()} - {(damage.m_blunt * damagePercent / 100f * maxFactor).RoundOne()}</color>)");
-                        __result = new Regex("(\\$inventory_slash.*)").Replace(__result,
+                        __result = InventorySlashRegex.Replace(__result,
                             $"$1 (<color={color}>+{(damage.m_slash * damagePercent / 100f * minFactor).RoundOne()} - {(damage.m_slash * damagePercent / 100f * maxFactor).RoundOne()}</color>)");
-                        __result = new Regex("(\\$inventory_pierce.*)").Replace(__result,
+                        __result = InventoryPierceRegex.Replace(__result,
                             $"$1 (<color={color}>+{(damage.m_pierce * damagePercent / 100f * minFactor).RoundOne()} - {(damage.m_pierce * damagePercent / 100f * maxFactor).RoundOne()}</color>)");
-                        __result = new Regex("(\\$inventory_fire.*)").Replace(__result,
+                        __result = InventoryFireRegex.Replace(__result,
                             $"$1 (<color={color}>+{(damage.m_fire * damagePercent / 100f * minFactor).RoundOne()} - {(damage.m_fire * damagePercent / 100f * maxFactor).RoundOne()}</color>)");
-                        __result = new Regex("(\\$inventory_frost.*)").Replace(__result,
+                        __result = InventoryFrostRegex.Replace(__result,
                             $"$1 (<color={color}>+{(damage.m_frost * damagePercent / 100f * minFactor).RoundOne()} - {(damage.m_frost * damagePercent / 100f * maxFactor).RoundOne()}</color>)");
-                        __result = new Regex("(\\$inventory_lightning.*)").Replace(__result,
+                        __result = InventoryLightningRegex.Replace(__result,
                             $"$1 (<color={color}>+{(damage.m_lightning * damagePercent / 100f * minFactor).RoundOne()} - {(damage.m_lightning * damagePercent / 100f * maxFactor).RoundOne()}</color>)");
-                        __result = new Regex("(\\$inventory_poison.*)").Replace(__result,
+                        __result = InventoryPoisonRegex.Replace(__result,
                             $"$1 (<color={color}>+{(damage.m_poison * damagePercent / 100f * minFactor).RoundOne()} - {(damage.m_poison * damagePercent / 100f * maxFactor).RoundOne()}</color>)");
-                        __result = new Regex("(\\$inventory_spirit.*)").Replace(__result,
+                        __result = InventorySpiritRegex.Replace(__result,
                             $"$1 (<color={color}>+{(damage.m_spirit * damagePercent / 100f * minFactor).RoundOne()} - {(damage.m_spirit * damagePercent / 100f * maxFactor).RoundOne()}</color>)");
                         __result += $"\n<color={color}>•</color> $enchantment_bonusespercentdamage (<color={color}>+{damagePercent}%</color>)";
                     }
                     float armorPercent = stats.armor_percentage;
                     if (armorPercent > 0)
                     {
-                        __result = new Regex("(\\$item_blockarmor.*)").Replace(__result, $"$1 (<color={color}>+{(item.GetBaseBlockPower(qualityLevel) * armorPercent / 100f).RoundOne()}({armorPercent}%)</color>)");
-                        __result = new Regex("(\\$item_armor.*)").Replace(__result, $"$1 (<color={color}>+{(item.GetArmor(qualityLevel, item.m_worldLevel) * armorPercent / 100f).RoundOne()}({armorPercent}%)</color>)");
+                        __result = ItemBlockArmorRegex.Replace(__result, $"$1 (<color={color}>+{(item.GetBaseBlockPower(qualityLevel) * armorPercent / 100f).RoundOne()}({armorPercent}%)</color>)");
+                        __result = ItemArmorRegex.Replace(__result, $"$1 (<color={color}>+{(item.GetArmor(qualityLevel, item.m_worldLevel) * armorPercent / 100f).RoundOne()}({armorPercent}%)</color>)");
                         __result += $"\n<color={color}>•</color> $enchantment_bonusespercentarmor (<color={color}>+{armorPercent}%</color>)";
                     }
                     float armor = stats.armor;
                     if (armor > 0)
                     {
-                        __result = new Regex("(\\$item_blockarmor.*)").Replace(__result, $"$1 (<color={color}>+{stats.armor}</color>)");
-                        __result = new Regex("(\\$item_armor.*)").Replace(__result, $"$1 (<color={color}>+{stats.armor}</color>)");
+                        __result = ItemBlockArmorRegex.Replace(__result, $"$1 (<color={color}>+{stats.armor}</color>)");
+                        __result = ItemArmorRegex.Replace(__result, $"$1 (<color={color}>+{stats.armor}</color>)");
                     }
 
-                    __result += stats.BuildAdditionalStats(color, true);
+                    __result += EnchantmentStatFormatter.BuildAdditionalStats(stats, color);
+                    if (!string.IsNullOrWhiteSpace(statusLine))
+                    {
+                        __result += statusLine;
+                    }
                 }
             }
 
-            if (reqs != null)
+            if (currentLevel <= 0 && !string.IsNullOrWhiteSpace(statusLine))
             {
-                string color = SyncedData.GetColor(dropName, currentLevel, out _, true).IncreaseColorLight();
-                if (currentLevel == 0) color = "white";
-
-                bool isEnchantable = SyncedData.IsLevelEnchantable(dropName, currentLevel, item.IsWeapon());
-                if (isEnchantable)
-                {
-                    float chance = SyncedData.GetEnchantmentChance(dropName, currentLevel, item.IsWeapon()).success;
-                    __result += $"\n<color={color}>•</color> $enchantment_chance (<color={color}>{chance.RoundOne()}%</color>)";
-                    float additionalChance = SyncedData.GetAdditionalEnchantmentChance();
-                    if (additionalChance > 0)
-                    {
-                        __result += $" (<color={color}>+{additionalChance.RoundOne()}%</color> $enchantment_additionalchance)";
-                    }
-                }
-                else if (currentLevel > 0)
-                {
-                    blockShowEnchant = true;
-                    __result += $"\n<color={color}>•</color> $enchantment_maxedout".Localize();
-                }
-
-                if (!blockShowEnchant && reqs.enchant_prefab.IsValid())
-                {
-                    char tier = reqs.enchant_prefab.prefab[reqs.enchant_prefab.prefab.Length - 1];
-                    __result += $"\n<color=yellow>• $enchantment_canbeenchantedwith_tier</color>".Localize(tier.ToString());
-
-                    if (reqs.required_skill > 0)
-                    {
-                        __result += "\n<color=yellow>• $enchantment_requiresskilllevel</color>".Localize(reqs.required_skill.ToString());
-                    }
-                }
+                __result += $"\n{statusLine}";
             }
         }
+    }
+
+    private static string BuildTooltipStatusLine(SyncedData.EnchantmentReqs reqs, string dropName, int currentLevel, ItemDrop.ItemData item)
+    {
+        if (reqs == null || item == null)
+        {
+            return string.Empty;
+        }
+
+        string color = SyncedData.GetColor(dropName, currentLevel, out _, true).IncreaseColorLight();
+        if (currentLevel == 0)
+        {
+            color = "white";
+        }
+
+        if (!SyncedData.IsLevelEnchantable(dropName, currentLevel, item.IsWeapon()))
+        {
+            return $"<color={color}>•</color> $enchantment_maxedout".Localize();
+        }
+
+        string scrollName = ResolveTooltipScrollName(reqs.enchant_prefab);
+        if (string.IsNullOrWhiteSpace(scrollName))
+        {
+            scrollName = ResolveTooltipScrollName(reqs.blessed_enchant_prefab);
+        }
+
+        return string.IsNullOrWhiteSpace(scrollName)
+            ? string.Empty
+            : $"<color={color}>•</color> $enchantment_canbeenchantedwith <color=yellow>{scrollName}</color>".Localize();
+    }
+
+    private static string ResolveTooltipScrollName(SyncedData.SingleReq requirement)
+    {
+        if (requirement == null || !requirement.IsValid())
+        {
+            return string.Empty;
+        }
+
+        return ZNetScene.instance?.GetPrefab(requirement.prefab)?.GetComponent<ItemDrop>()?.m_itemData?.m_shared?.m_name ?? string.Empty;
     }
  
     [HarmonyPatch(typeof(InventoryGui), nameof(InventoryGui.UpdateRecipe))]
@@ -485,9 +357,10 @@ public static class Enchantment_Core
         [UsedImplicitly]
         private static void Postfix(Player __instance, ref HitData.DamageModifiers mods)
         {
-            foreach (var en in __instance.EquippedEnchantments())
+            EquippedEnchantmentSnapshotService.Snapshot snapshot = EquippedEnchantmentSnapshotService.GetSnapshot(__instance);
+            if (snapshot.ResistancePairs.Count > 0)
             {
-                if (en.Stats is {} stats) mods.Apply(stats.GetResistancePairs());
+                mods.Apply(snapshot.ResistancePairs);
             }
         }
     }
@@ -501,13 +374,7 @@ public static class Enchantment_Core
         {
             if (__instance is Player player)
             {
-                foreach (var en in player.EquippedEnchantments())
-                {
-                    if (en.Stats is { } stats)
-                    {
-                        health += stats.max_hp;
-                    }
-                }
+                health += EquippedEnchantmentSnapshotService.GetSnapshot(player).MaxHealthBonus;
             }
         }
     }
@@ -519,13 +386,7 @@ public static class Enchantment_Core
         [UsedImplicitly]
         private static void Prefix(Player __instance, ref float stamina)
         {
-            foreach (var en in __instance.EquippedEnchantments())
-            {
-                if (en.Stats is { } stats)
-                {
-                    stamina += stats.max_stamina;
-                }
-            }
+            stamina += EquippedEnchantmentSnapshotService.GetSnapshot(__instance).MaxStaminaBonus;
         }
     }
 
@@ -536,10 +397,7 @@ public static class Enchantment_Core
         [UsedImplicitly]
         private static void Postfix(Player __instance, ref float __result)
         {
-            foreach (var en in __instance.EquippedEnchantments())
-            {
-                if (en.Stats is {} stats) __result += stats.movement_speed / 100f;
-            }
+            __result += EquippedEnchantmentSnapshotService.GetSnapshot(__instance).MovementModifier;
         }
     }
 
@@ -590,10 +448,38 @@ public static class Enchantment_Core
     [ClientOnlyPatch]
     public static class Player_UpdateStats_Patch
     {
+        private static readonly FieldInfo CharacterNViewField = AccessTools.Field(typeof(Character), nameof(Character.m_nview));
+        private static readonly MethodInfo ZNetViewGetZdoMethod = AccessTools.Method(typeof(ZNetView), nameof(ZNetView.GetZDO));
+        private static readonly FieldInfo ZdoVarsStaminaField = AccessTools.Field(typeof(ZDOVars), nameof(ZDOVars.s_stamina));
+        private static readonly FieldInfo PlayerStaminaField = AccessTools.Field(typeof(Player), nameof(Player.m_stamina));
+        private static readonly MethodInfo ZdoSetFloatMethod = AccessTools.Method(typeof(ZDO), nameof(ZDO.Set), new[] { typeof(int), typeof(float) });
+        private static readonly MethodInfo ApplyEnchantmentStaminaRegenMethod = AccessTools.DeclaredMethod(typeof(PlayerExtensions), nameof(PlayerExtensions.UpdateEnchantmentStaminaRegen));
+
         [UsedImplicitly]
-        private static void Postfix(Player __instance, float dt)
+        private static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
         {
-            __instance.UpdateEnchantmentStaminaRegen(dt);
+            CodeMatcher matcher = new(instructions);
+            matcher.MatchForward(false,
+                new CodeMatch(OpCodes.Ldarg_0),
+                new CodeMatch(OpCodes.Ldfld, CharacterNViewField),
+                new CodeMatch(OpCodes.Callvirt, ZNetViewGetZdoMethod),
+                new CodeMatch(OpCodes.Ldsfld, ZdoVarsStaminaField),
+                new CodeMatch(OpCodes.Ldarg_0),
+                new CodeMatch(OpCodes.Ldfld, PlayerStaminaField),
+                new CodeMatch(OpCodes.Callvirt, ZdoSetFloatMethod));
+
+            if (matcher.IsInvalid)
+            {
+                Utils.print("Failed to inject enchantment stamina regen into Player.UpdateStats; using vanilla stamina regen only.", ConsoleColor.Yellow);
+                return instructions;
+            }
+
+            matcher.Insert(
+                new CodeInstruction(OpCodes.Ldarg_0),
+                new CodeInstruction(OpCodes.Ldarg_1),
+                new CodeInstruction(OpCodes.Call, ApplyEnchantmentStaminaRegenMethod));
+
+            return matcher.InstructionEnumeration();
         }
     }
 }
@@ -608,14 +494,7 @@ public static class PlayerExtensions
         if (enchantmentRegenTimer >= 10f)
         {
             enchantmentRegenTimer = 0f;
-            float regen = 0f;
-            foreach (var en in player.EquippedEnchantments())
-            {
-                if (en.Stats is { } stats)
-                {
-                    regen += stats.hp_regen;
-                }
-            }
+            float regen = EquippedEnchantmentSnapshotService.GetSnapshot(player).HealthRegen;
             if (regen > 0)
             {
                 player.Heal(regen);
@@ -625,7 +504,12 @@ public static class PlayerExtensions
 
     public static void UpdateEnchantmentStaminaRegen(this Player player, float dt)
     {
-        if (player.IsDead() || player.InIntro() || player.IsTeleporting())
+        if (player != Player.m_localPlayer)
+        {
+            return;
+        }
+
+        if (player.IsDead())
         {
             return;
         }
@@ -642,14 +526,7 @@ public static class PlayerExtensions
             num = 0f;
         }
 
-        float additionalRegen = 0f;
-        foreach (var en in player.EquippedEnchantments())
-        {
-            if (en.Stats is { } stats)
-            {
-                additionalRegen += stats.stamina_regen;
-            }
-        }
+        float additionalRegen = EquippedEnchantmentSnapshotService.GetSnapshot(player).StaminaRegen;
 
         if (additionalRegen > 0f)
         {
@@ -658,7 +535,7 @@ public static class PlayerExtensions
             float regenAmount = additionalRegen * staminaMultiplier * num * dt;
 
             player.m_stamina = Mathf.Min(maxStamina, player.m_stamina + regenAmount * Game.m_staminaRegenRate);
-            player.m_nview.GetZDO().Set(ZDOVars.s_stamina, player.m_stamina);
         }
     }
 }
+

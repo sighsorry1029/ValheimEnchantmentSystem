@@ -1,4 +1,4 @@
-﻿using System.Reflection.Emit;
+using System.Reflection.Emit;
 using BepInEx.Logging;
 using ItemDataManager;
 using YamlDotNet.Serialization;
@@ -184,18 +184,64 @@ public static class Utils
         return find.name;
     }
 
-    public static T FromYAML<T>(this string path) where T : new()
+    public static bool TryDeserializeYAML<T>(string text, out T obj, out string error)
     {
+        obj = default!;
+        error = string.Empty;
+
         try
         {
-            T obj = new DeserializerBuilder().Build().Deserialize<T>(File.ReadAllText(path));
-            return obj;
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                error = "content is empty";
+                return false;
+            }
+
+            T parsed = new DeserializerBuilder().Build().Deserialize<T>(text);
+            if (parsed is null)
+            {
+                error = "deserialized to null";
+                return false;
+            }
+
+            obj = parsed;
+            return true;
         }
         catch (Exception ex)
         {
-            print($"Error while deserializing {path}:\n{ex}");
-            return new T();
+            error = ex.ToString();
+            return false;
         }
+    }
+
+    public static bool TryFromYAML<T>(this string path, out T obj, out string error)
+    {
+        obj = default!;
+
+        try
+        {
+            if (!File.Exists(path))
+            {
+                error = "file does not exist";
+                return false;
+            }
+
+            string text = File.ReadAllText(path);
+            return TryDeserializeYAML(text, out obj, out error);
+        }
+        catch (Exception ex)
+        {
+            error = ex.ToString();
+            return false;
+        }
+    }
+
+    public static T FromYAML<T>(this string path)
+    {
+        if (path.TryFromYAML(out T obj, out string error))
+            return obj;
+
+        throw new InvalidOperationException($"Error while deserializing {path}: {error}");
     }
 
     public static IEnumerable<Enchantment_Core.Enchanted> EquippedEnchantments(this Player p) =>
@@ -222,10 +268,19 @@ public static class Utils
 
     public static void IncreaseSkillEXP(Skills.SkillType skillType, float expToAdd)
     {
-        Skills.Skill skill = Player.m_localPlayer.m_skills.GetSkill(skillType);
+        Player localPlayer = Player.m_localPlayer;
+        if (localPlayer == null || expToAdd <= 0f)
+        {
+            return;
+        }
+
+        Skills.Skill skill = localPlayer.m_skills.GetSkill(skillType);
 
         if (skill != null)
         {
+            float gainFactor = Mathf.Max(0f, skill.m_info?.m_increseStep ?? 1f);
+            expToAdd *= gainFactor;
+
             while (expToAdd > 0)
             {
                 float nextLevelRequirement = skill.GetNextLevelRequirement();

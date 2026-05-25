@@ -1,25 +1,38 @@
-﻿using System.Net;
+using System.Net;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace kg.ValheimEnchantmentSystem.Misc;
 
 public static class DiscordWebhook
 {
+    private static readonly Regex HtmlTagRegex = new("<.*?>", RegexOptions.Compiled);
+
     public static void TrySend(string link, string msg)
     {
-        msg = System.Text.RegularExpressions.Regex.Replace(msg, "<.*?>", "**");
+        msg = HtmlTagRegex.Replace(msg ?? string.Empty, "**");
         if (!Uri.TryCreate(link, UriKind.Absolute, out _)) return;
+
         Task.Run(async () =>
         {
-            string json = "{\"content\": \"" + $"{msg}" + "\"}";
-            HttpWebRequest httpWebRequest = (HttpWebRequest)WebRequest.Create(link);
-            httpWebRequest.ContentType = "application/json";
-            httpWebRequest.Method = "POST";
-            using (StreamWriter streamWriter = new StreamWriter(httpWebRequest.GetRequestStream()))
+            try
             {
-                await streamWriter.WriteAsync(json);
+                string json = JSON.ToJSON(new Dictionary<string, string> { { "content", msg } });
+                HttpWebRequest request = (HttpWebRequest)WebRequest.Create(link);
+                request.ContentType = "application/json";
+                request.Method = "POST";
+
+                using (StreamWriter streamWriter = new(await request.GetRequestStreamAsync()))
+                {
+                    await streamWriter.WriteAsync(json);
+                }
+
+                using WebResponse _ = await request.GetResponseAsync();
             }
-            await httpWebRequest.GetResponseAsync();
+            catch (Exception ex)
+            {
+                Utils.print($"Discord webhook send failed: {ex.Message}", ConsoleColor.Red);
+            }
         });
     }
 }

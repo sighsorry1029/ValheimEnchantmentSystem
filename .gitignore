@@ -1,4 +1,4 @@
-﻿bin
+bin
 obj
 /packages
 .tmp/
@@ -12,6 +12,8 @@ Directory.Build.targets
 /GithubReadme/
 _tmp_*/
 _tmp_*
+%TEMP%/
+_valheim_decomp/
 *.backup
 *.latest
 ThunderstorePackage/*.mdb

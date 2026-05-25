@@ -1,4 +1,4 @@
-﻿/*using System;
+/*using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -104,7 +104,7 @@ public static class StatsPanel
                     
                     bool cond2 = gentypedefstr.Contains("System.Collections.Generic.Dictionary") || gentypedefstr.Contains("System.Collections.Generic.List");
                     
-                    if (type.Namespace != null && (type.Namespace.Contains("ValheimEnchantmentSystem") || type.Namespace.Contains("ISP_Auto"))  && field.IsStatic && field.FieldType.IsGenericType && cond2)
+                    if (type.Namespace != null && type.Namespace.Contains("ValheimEnchantmentSystem") && field.IsStatic && field.FieldType.IsGenericType && cond2)
                     {
                         StatsDict["Dictionary / List"]._statsList.Add(new(field, type.FullName, null, false));
                     }
