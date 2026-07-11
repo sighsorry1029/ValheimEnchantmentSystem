@@ -1,11 +1,11 @@
 using JetBrains.Annotations;
+using kg.ValheimEnchantmentSystem.Configs;
 using kg.ValheimEnchantmentSystem.Misc;
 using Object = UnityEngine.Object;
 using Random = UnityEngine.Random;
 
 namespace kg.ValheimEnchantmentSystem.Items_Structures;
 
-[VES_Autoload(VES_Autoload.Priority.Normal, "OnInit", typeof(BiomeTierResolver))]
 public static class ScrollDropService
 {
     private static ConfigEntry<float> DropChance = null!;
@@ -18,31 +18,49 @@ public static class ScrollDropService
     private static ConfigEntry<bool> MonsterDroppingSkillScrolls = null!;
     private static ConfigEntry<string> ExcludePrefabsFromDrop = null!;
     private static readonly HashSet<string> ExcludedDropPrefabs = new();
+    private static bool _configurationBound;
     private static bool _initialized;
-
-    [UsedImplicitly]
-    private static void OnInit()
-    {
-        Initialize();
-    }
 
     public static void Initialize()
     {
         if (_initialized)
             return;
 
+        BindConfiguration();
         _initialized = true;
-        MonsterDroppingScrolls = ValheimEnchantmentSystem.config("Scrolls", "Drop From Monsters", true, "Allow monsters to drop scrolls.");
-        MonsterDroppingSkillScrolls = ValheimEnchantmentSystem.config("Skill Scrolls", "Drop From Monsters (Skill exp)", true, "Allow monsters to drop enchant skill exp scrolls.");
-        DropChance = ValheimEnchantmentSystem.config("Scrolls", "Drop Chance", 7f, "Chance to drop from enemies.");
-        DropChanceBosses = ValheimEnchantmentSystem.config("Scrolls", "Drop Chance (Bosses)", 100f, "Chance to drop from bosses.");
-        DropChanceBlessed = ValheimEnchantmentSystem.config("Scrolls", "Blessed Drop Chance", 0.5f, "Chance to drop from enemies.");
-        DropChanceBlessedBosses = ValheimEnchantmentSystem.config("Scrolls", "Blessed Drop Chance (Bosses)", 40f, "Chance to drop from bosses.");
-        DropChanceSkill = ValheimEnchantmentSystem.config("Skill Scrolls", "Drop Chance (Skill exp)", 1f, "Chance to drop from enemies.");
-        DropChanceSkillBosses = ValheimEnchantmentSystem.config("Skill Scrolls", "Drop Chance (Skill exp) (Bosses)", 100f, "Chance to drop from bosses.");
-        ExcludePrefabsFromDrop = ValheimEnchantmentSystem.config("Scrolls", "Exclude Prefabs From Drop", "TentaRoot", "Comma separated list of prefabs to exclude from dropping scrolls.");
+    }
+
+    internal static void BindConfiguration()
+    {
+        if (_configurationBound)
+            return;
+
+        MonsterDroppingScrolls = ValheimEnchantmentSystem.config("Scrolls", "Drop From Monsters", true,
+            Display("Allow monsters to drop scrolls.", ConfigurationManagerDisplay.Scrolls, "Drop From Monsters", 1000));
+        MonsterDroppingSkillScrolls = ValheimEnchantmentSystem.config("Skill Scrolls", "Drop From Monsters (Skill exp)", true,
+            Display("Allow monsters to drop enchant skill exp scrolls.", ConfigurationManagerDisplay.Skill, "Skill Scroll - Drop From Monsters", 700));
+        DropChance = ValheimEnchantmentSystem.config("Scrolls", "Drop Chance", 7f,
+            Display("Chance to drop from enemies.", ConfigurationManagerDisplay.Scrolls, "Drop Chance", 990));
+        DropChanceBosses = ValheimEnchantmentSystem.config("Scrolls", "Drop Chance (Bosses)", 100f,
+            Display("Chance to drop from bosses.", ConfigurationManagerDisplay.Scrolls, "Boss Drop Chance", 980));
+        DropChanceBlessed = ValheimEnchantmentSystem.config("Scrolls", "Blessed Drop Chance", 0.5f,
+            Display("Chance to drop blessed scrolls from enemies.", ConfigurationManagerDisplay.Scrolls, "Blessed Drop Chance", 970));
+        DropChanceBlessedBosses = ValheimEnchantmentSystem.config("Scrolls", "Blessed Drop Chance (Bosses)", 40f,
+            Display("Chance to drop blessed scrolls from bosses.", ConfigurationManagerDisplay.Scrolls, "Blessed Boss Drop Chance", 960));
+        DropChanceSkill = ValheimEnchantmentSystem.config("Skill Scrolls", "Drop Chance (Skill exp)", 1f,
+            Display("Chance to drop enchant skill exp scrolls from enemies.", ConfigurationManagerDisplay.Skill, "Skill Scroll - Drop Chance", 690));
+        DropChanceSkillBosses = ValheimEnchantmentSystem.config("Skill Scrolls", "Drop Chance (Skill exp) (Bosses)", 100f,
+            Display("Chance to drop enchant skill exp scrolls from bosses.", ConfigurationManagerDisplay.Skill, "Skill Scroll - Boss Drop Chance", 680));
+        ExcludePrefabsFromDrop = ValheimEnchantmentSystem.config("Scrolls", "Exclude Prefabs From Drop", "TentaRoot",
+            Display("Comma separated list of prefabs to exclude from dropping scrolls.", ConfigurationManagerDisplay.Scrolls, "Exclude Prefabs From Drop", 950));
         ExcludePrefabsFromDrop.SettingChanged += FillExclude;
         FillExclude();
+        _configurationBound = true;
+    }
+
+    private static ConfigDescription Display(string description, string category, string displayName, int order)
+    {
+        return ConfigurationManagerDisplay.Description(description, category, order, displayName);
     }
 
     private static void FillExclude(object? sender = null, EventArgs? e = null)

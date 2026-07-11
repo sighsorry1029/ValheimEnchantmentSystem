@@ -1,5 +1,6 @@
 using JetBrains.Annotations;
 using LocalizationManager;
+using kg.ValheimEnchantmentSystem.Configs;
 using kg.ValheimEnchantmentSystem.Integrations;
 
 namespace kg.ValheimEnchantmentSystem.Platform;
@@ -9,12 +10,7 @@ internal static class ThinItemManager
     // Hammer alone appears too early during ObjectDB bootstrap; gate on a late vanilla item as well.
     private static readonly string[] ObjectDbReadinessSentinels = { "Hammer", "TrophyFader" };
     private const string FixedScrollCraftingStationName = "kg_EnchantmentScrollStation";
-    private const string ScrollRecipeConfigSection = "Scroll Recipes";
-
-    private sealed class ConfigurationManagerAttributes
-    {
-        [UsedImplicitly] public int? Order;
-    }
+    private const string ScrollRecipeConfigSection = ConfigurationManagerDisplay.ScrollRecipes;
 
     private sealed class ItemConfig
     {
@@ -419,7 +415,11 @@ internal static class ThinItemManager
 
     private static ConfigDescription OrderedDescription(string description, int order, AcceptableValueBase? acceptableValues = null)
     {
-        return new ConfigDescription(description, acceptableValues, new ConfigurationManagerAttributes { Order = order });
+        return ConfigurationManagerDisplay.Description(
+            description,
+            ConfigurationManagerDisplay.ScrollRecipes,
+            order,
+            acceptableValues: acceptableValues);
     }
 
     private static class SerializedRequirements

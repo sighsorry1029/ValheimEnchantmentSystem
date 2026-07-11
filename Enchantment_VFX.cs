@@ -7,16 +7,15 @@ using Object = UnityEngine.Object;
 
 namespace kg.ValheimEnchantmentSystem;
 
-[VES_Autoload(VES_Autoload.Priority.Normal, "OnInit", typeof(SyncedData))]
 public static class Enchantment_VFX 
 { 
     private static readonly int TintColor = Shader.PropertyToID("_TintColor");
-    private const int MainVfxParticleBrightnessOrder = 98;
-    private const int MainVfxLightIntensityOrder = 99;
-    private const int MainVfxTintIntensityOrder = 100;
-    private const int ArmorVfxTintIntensityOrder = 101;
-    private const int EnableWeaponVfxOrder = 102;
-    private const int EnableArmorVfxOrder = 103;
+    private const int MainVfxParticleBrightnessOrder = 700;
+    private const int MainVfxLightIntensityOrder = 690;
+    private const int MainVfxTintIntensityOrder = 680;
+    private const int ArmorVfxTintIntensityOrder = 670;
+    private const int EnableWeaponVfxOrder = 800;
+    private const int EnableArmorVfxOrder = 790;
     private const string ManagedLightName = "VES_Light";
     private const string MeshParticleEffectPrefix = "VES_MPE_";
     private static readonly MaterialPropertyBlock PropertyBlock = new();
@@ -543,23 +542,7 @@ public static class Enchantment_VFX
         }
     }
 
-    private class ConfigurationManagerAttributes
-    {
-        [UsedImplicitly] public int? Order;
-    }
-
-    private static ConfigDescription OrderedDescription(string description, int order) => new(
-        description,
-        null,
-        new ConfigurationManagerAttributes { Order = order });
-
-    private static ConfigDescription OrderedRangeDescription(string description, int order, float min, float max) => new(
-        description,
-        new AcceptableValueRange<float>(min, max),
-        new ConfigurationManagerAttributes { Order = order });
-    
-    [UsedImplicitly]
-    private static void OnInit()
+    internal static void Initialize()
     {
         if (ValheimEnchantmentSystem.NoGraphics) return;
         VFXs.Add(ValheimEnchantmentSystem._asset.LoadAsset<Material>("Enchantment_VFX_Mat1"));
@@ -571,30 +554,56 @@ public static class Enchantment_VFX
             "",
             "MainVFXParticleBrightness",
             1.5f,
-            OrderedRangeDescription("Brightness of weapon/world/stand particle VFX.", MainVfxParticleBrightnessOrder, 0f, 5f));
+            ClientVfxDescription("Brightness of weapon/world/stand particle VFX.", "VFX - Main Particle Brightness", MainVfxParticleBrightnessOrder, 0f, 5f));
         _mainVfxLightIntensity = ValheimEnchantmentSystem.ClientConfig(
             "",
             "MainVFXLightIntensity",
             1f,
-            OrderedRangeDescription("Light intensity added by weapon/world/stand VFX.", MainVfxLightIntensityOrder, 0f, 5f));
+            ClientVfxDescription("Light intensity added by weapon/world/stand VFX.", "VFX - Main Light Intensity", MainVfxLightIntensityOrder, 0f, 5f));
         _mainVfxTintIntensity = ValheimEnchantmentSystem.ClientConfig(
             "",
             "MainVFXTintIntensity",
             8f,
-            OrderedRangeDescription("Emission intensity of weapon/world/stand VFX materials.", MainVfxTintIntensityOrder, 0f, 50f));
+            ClientVfxDescription("Emission intensity of weapon/world/stand VFX materials.", "VFX - Main Tint Intensity", MainVfxTintIntensityOrder, 0f, 50f));
         _armorVfxTintIntensity = ValheimEnchantmentSystem.ClientConfig(
             "",
             "ArmorVFXTintIntensity",
             2f,
-            OrderedRangeDescription("Emission intensity of armor/cape/utility VFX materials.", ArmorVfxTintIntensityOrder, 0f, 20f));
-        _enableWeaponVFX = ValheimEnchantmentSystem.ClientConfig("", "EnableWeaponVFX", true, OrderedDescription("Enable enchantment VFX for held items like weapons, shields, tools, torches, and their stands.", EnableWeaponVfxOrder));
-        _enableArmorVFX = ValheimEnchantmentSystem.ClientConfig("", "EnableArmorVFX", true, OrderedDescription("Enable enchantment VFX for worn items like armor, capes, utility items, and their stands.", EnableArmorVfxOrder));
+            ClientVfxDescription("Emission intensity of armor/cape/utility VFX materials.", "VFX - Armor Tint Intensity", ArmorVfxTintIntensityOrder, 0f, 20f));
+        _enableWeaponVFX = ValheimEnchantmentSystem.ClientConfig(
+            "",
+            "EnableWeaponVFX",
+            true,
+            ClientVfxDescription("Enable enchantment VFX for held items like weapons, shields, tools, torches, and their stands.", "VFX - Enable Weapon VFX", EnableWeaponVfxOrder));
+        _enableArmorVFX = ValheimEnchantmentSystem.ClientConfig(
+            "",
+            "EnableArmorVFX",
+            true,
+            ClientVfxDescription("Enable enchantment VFX for worn items like armor, capes, utility items, and their stands.", "VFX - Enable Armor VFX", EnableArmorVfxOrder));
         _enableWeaponVFX.SettingChanged += (_, _) => OnEquipmentVisualSettingChanged();
         _enableArmorVFX.SettingChanged += (_, _) => OnEquipmentVisualSettingChanged();
         _mainVfxParticleBrightness.SettingChanged += (_, _) => OnEquipmentVisualSettingChanged();
         _mainVfxLightIntensity.SettingChanged += (_, _) => OnEquipmentVisualSettingChanged();
         _mainVfxTintIntensity.SettingChanged += (_, _) => OnEquipmentVisualSettingChanged();
         _armorVfxTintIntensity.SettingChanged += (_, _) => OnEquipmentVisualSettingChanged();
+    }
+
+    private static ConfigDescription ClientVfxDescription(
+        string description,
+        string displayName,
+        int order,
+        float? min = null,
+        float? max = null)
+    {
+        AcceptableValueBase? acceptableValues = min.HasValue && max.HasValue
+            ? new AcceptableValueRange<float>(min.Value, max.Value)
+            : null;
+        return ConfigurationManagerDisplay.Description(
+            description,
+            ConfigurationManagerDisplay.Client,
+            order,
+            displayName,
+            acceptableValues);
     }
 
     private static void OnEquipmentVisualSettingChanged()

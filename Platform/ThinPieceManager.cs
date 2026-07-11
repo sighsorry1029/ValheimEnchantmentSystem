@@ -8,6 +8,7 @@ using BepInEx.Bootstrap;
 using BepInEx.Configuration;
 using HarmonyLib;
 using JetBrains.Annotations;
+using kg.ValheimEnchantmentSystem.Configs;
 using LocalizationManager;
 using UnityEngine;
 
@@ -214,7 +215,11 @@ public class BuildPiece
             PieceConfig cfg = pieceConfigs[piece] = new PieceConfig();
 
             cfg.craft = Config(configGroup, "Crafting Costs", SerializedRequirements.Serialize(piece.RequiredItems.Requirements),
-                new ConfigDescription($"Item costs to craft {localizedName}."));
+                ConfigurationManagerDisplay.Description(
+                    $"Item costs to craft {localizedName}.",
+                    ConfigurationManagerDisplay.General,
+                    900,
+                    $"{configGroup} - Crafting Costs"));
             cfg.craft.SettingChanged += (_, _) => ReapplyRuntimeConfiguration(piece);
         }
 

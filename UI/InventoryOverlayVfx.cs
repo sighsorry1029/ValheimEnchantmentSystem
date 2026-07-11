@@ -7,27 +7,15 @@ using Object = UnityEngine.Object;
 
 namespace kg.ValheimEnchantmentSystem;
 
-[VES_Autoload(VES_Autoload.Priority.Normal, "OnInit", typeof(SyncedData))]
 internal static class InventoryOverlayVfx
 {
-    private const int EnableInventoryVisualOrder = 104;
+    private const int EnableInventoryVisualOrder = 980;
     private static readonly HashSet<GameObject> InitializedElementPrefabs = new();
     private static readonly HashSet<int> BoundScrollGrids = new();
     private static GameObject? _hotbarPartPrefab;
     private static ConfigEntry<bool>? _enableInventoryVisual;
 
-    private class ConfigurationManagerAttributes
-    {
-        [UsedImplicitly] public int? Order;
-    }
-
-    private static ConfigDescription OrderedDescription(string description, int order) => new(
-        description,
-        null,
-        new ConfigurationManagerAttributes { Order = order });
-
-    [UsedImplicitly]
-    private static void OnInit()
+    internal static void Initialize()
     {
         if (ValheimEnchantmentSystem.NoGraphics)
         {
@@ -39,7 +27,11 @@ internal static class InventoryOverlayVfx
             "",
             "EnableInventoryVisual",
             true,
-            OrderedDescription("Enable inventory and hotbar enchant visuals.", EnableInventoryVisualOrder));
+            ConfigurationManagerDisplay.Description(
+                "Enable inventory and hotbar enchant visuals.",
+                ConfigurationManagerDisplay.Client,
+                EnableInventoryVisualOrder,
+                "UI - Enable Inventory Enchantment Visual"));
         _enableInventoryVisual.SettingChanged += (_, _) => UpdateGrid();
         EngineEvents.InventoryChanged += OnInventoryChanged;
         EngineEvents.EquipmentChanged += OnEquipmentChanged;
@@ -98,6 +90,11 @@ internal static class InventoryOverlayVfx
 
         InitializedElementPrefabs.Add(elementPrefab);
         Transform transform = elementPrefab.transform;
+        if (transform.Find("VES_Level") != null)
+        {
+            return;
+        }
+
         GameObject overlay = Object.Instantiate(_hotbarPartPrefab);
         overlay.transform.SetParent(transform, false);
         overlay.name = "VES_Level";
@@ -136,6 +133,7 @@ internal static class InventoryOverlayVfx
 
         RectTransform? viewport = GetInventoryViewport(grid);
         int width = grid.m_inventory.GetWidth();
+        int height = grid.m_inventory.GetHeight();
 
         foreach (InventoryGrid.Element element in grid.m_elements)
         {
@@ -156,9 +154,29 @@ internal static class InventoryOverlayVfx
             }
         }
 
+        if (width <= 0 || height <= 0)
+        {
+            return;
+        }
+
         foreach (ItemDrop.ItemData itemData in grid.m_inventory.GetAllItems())
         {
-            InventoryGrid.Element element = grid.GetElement(itemData.m_gridPos.x, itemData.m_gridPos.y, width);
+            if (itemData == null ||
+                itemData.m_gridPos.x < 0 ||
+                itemData.m_gridPos.y < 0 ||
+                itemData.m_gridPos.x >= width ||
+                itemData.m_gridPos.y >= height)
+            {
+                continue;
+            }
+
+            long elementIndex = (long)itemData.m_gridPos.y * width + itemData.m_gridPos.x;
+            if (elementIndex < 0 || elementIndex >= grid.m_elements.Count)
+            {
+                continue;
+            }
+
+            InventoryGrid.Element element = grid.m_elements[(int)elementIndex];
             if (element?.m_go == null)
             {
                 continue;
@@ -226,6 +244,12 @@ internal static class InventoryOverlayVfx
 
     private static void OnMainMenuAwake(FejdStartup startup)
     {
+        InitializedElementPrefabs.Clear();
+        BoundScrollGrids.Clear();
+        Hud_Awake_Patch.BarRef = null;
+        HotkeyBar_UpdateIcons_Patch._needUpdateFrame = -1;
+        InventoryGrid_UpdateGui_Patch._needUpdateFrame = -1;
+
         if (_menuFontConfigured || _hotbarPartPrefab == null)
         {
             return;

@@ -4,18 +4,13 @@ using kg.ValheimEnchantmentSystem.Misc;
 
 namespace kg.ValheimEnchantmentSystem.UI;
 
-[VES_Autoload]
 public static class Notifications_UI
 {
-    private const int SuccessWebhook1Order = 600;
-    private const int SuccessWebhook2Order = 599;
-    private const int SuccessWebhook3Order = 598;
-    private const int FailWebhook1Order = 500;
-    private const int FailWebhook2Order = 499;
-    private const int FailWebhook3Order = 498;
+    private const int SuccessWebhooksOrder = 900;
+    private const int FailureWebhooksOrder = 800;
 
-    public static readonly ConfigEntry<string>[] _successWebhooks = new ConfigEntry<string>[3];
-    public static readonly ConfigEntry<string>[] _failWebhooks = new ConfigEntry<string>[3];
+    private static ConfigEntry<string> _successWebhooks = null!;
+    private static ConfigEntry<string> _failureWebhooks = null!;
     public static ConfigEntry<int> _duration;
     private const float FadeDuration = 0.25f;
 
@@ -56,28 +51,46 @@ public static class Notifications_UI
     private const float NotificationRequestCooldown = 0.35f;
     private static readonly Dictionary<long, float> _requestCooldownUntil = new();
 
-    private class ConfigurationManagerAttributes
+    internal static void Initialize()
     {
-        [UsedImplicitly] public int? Order;
-    }
-
-    private static ConfigDescription OrderedDescription(string description, int order) => new(
-        description,
-        null,
-        new ConfigurationManagerAttributes { Order = order });
-
-    [UsedImplicitly]
-    private static void OnInit()
-    {
-        _successWebhooks[0] = ValheimEnchantmentSystem.config("Notifications", "SuccessWebhook1", "", OrderedDescription("Discord webhook #1 for success notifications", SuccessWebhook1Order), false);
-        _successWebhooks[1] = ValheimEnchantmentSystem.config("Notifications", "SuccessWebhook2", "", OrderedDescription("Discord webhook #2 for success notifications", SuccessWebhook2Order), false);
-        _successWebhooks[2] = ValheimEnchantmentSystem.config("Notifications", "SuccessWebhook3", "", OrderedDescription("Discord webhook #3 for success notifications", SuccessWebhook3Order), false);
-        _failWebhooks[0] = ValheimEnchantmentSystem.config("Notifications", "FailWebhook1", "", OrderedDescription("Discord webhook #1 for fail notifications", FailWebhook1Order), false);
-        _failWebhooks[1] = ValheimEnchantmentSystem.config("Notifications", "FailWebhook2", "", OrderedDescription("Discord webhook #2 for fail notifications", FailWebhook2Order), false);
-        _failWebhooks[2] = ValheimEnchantmentSystem.config("Notifications", "FailWebhook3", "", OrderedDescription("Discord webhook #3 for fail notifications", FailWebhook3Order), false);
+        EnchantmentSettings.BindNotificationSettings();
+        _successWebhooks = ValheimEnchantmentSystem.config(
+            "Notifications",
+            "Success Webhooks",
+            "",
+            NotificationDescription(
+                "Comma-separated Discord webhook URLs for successful enchantment notifications. Example: URL1, URL2, URL3. Only the server uses these URLs; they are not synchronized to clients.",
+                "Success Webhooks",
+                SuccessWebhooksOrder),
+            false);
+        _failureWebhooks = ValheimEnchantmentSystem.config(
+            "Notifications",
+            "Failure Webhooks",
+            "",
+            NotificationDescription(
+                "Comma-separated Discord webhook URLs for failed enchantment notifications. Example: URL1, URL2, URL3. Only the server uses these URLs; they are not synchronized to clients.",
+                "Failure Webhooks",
+                FailureWebhooksOrder),
+            false);
         if (ValheimEnchantmentSystem.NoGraphics) return;
-        _filterConfig = ValheimEnchantmentSystem.ClientConfig("Notifications", "Filter", Filter.Success, "Filter notifications by type");
-        _duration = ValheimEnchantmentSystem.ClientConfig("Notifications", "Duration", 5, "Duration of notification");
+        _filterConfig = ValheimEnchantmentSystem.ClientConfig(
+            "Notifications",
+            "Filter",
+            Filter.Success,
+            ConfigurationManagerDisplay.Description(
+                "Filter notifications by type.",
+                ConfigurationManagerDisplay.Client,
+                900,
+                "Notifications - Filter"));
+        _duration = ValheimEnchantmentSystem.ClientConfig(
+            "Notifications",
+            "Duration",
+            5,
+            ConfigurationManagerDisplay.Description(
+                "Duration of notifications in seconds.",
+                ConfigurationManagerDisplay.Client,
+                890,
+                "Notifications - Duration"));
 
         UI = UnityEngine.Object.Instantiate(ValheimEnchantmentSystem._asset.LoadAsset<GameObject>("kg_EnchantmentUI_Notification"));
         UI.name = "kg_EnchantmentUI_Notification";
@@ -90,6 +103,18 @@ public static class Notifications_UI
         ItemNameText = UI.transform.Find("Canvas/Scaler/NotificationText/Text").GetComponent<Text>();
         Outline = UI.transform.Find("Canvas/Scaler/NotificationItem/outline").GetComponent<Image>();
         _colorGroup.AddRange(UI.GetComponentsInChildren<Image>(true).Where(t => t.name == "colorcontrol").Select(x => x.GetComponent<Image>()));
+    }
+
+    private static ConfigDescription NotificationDescription(
+        string description,
+        string displayName,
+        int order)
+    {
+        return ConfigurationManagerDisplay.Description(
+            description,
+            ConfigurationManagerDisplay.Notifications,
+            order,
+            displayName);
     }
 
 
@@ -211,31 +236,38 @@ public static class Notifications_UI
         if (!Enum.IsDefined(typeof(NotificationItemResult), type)) return false;
         if (prevLevel < 0 || level < 0 || prevLevel > 500 || level > 500) return false;
         if (string.IsNullOrWhiteSpace(itemPrefab) || !ZNetScene.instance) return false;
-        return ZNetScene.instance.GetPrefab(itemPrefab)?.GetComponent<ItemDrop>() is not null;
+
+        ItemDrop itemDrop = ZNetScene.instance.GetPrefab(itemPrefab)?.GetComponent<ItemDrop>();
+        if (itemDrop == null || SyncedData.GetReqs(itemPrefab) == null) return false;
+        if (!SyncedData.IsLevelEnchantable(itemPrefab, prevLevel, itemDrop.m_itemData.IsWeapon())) return false;
+        if (level < SyncedData.EnchantmentNotificationMinLevel.Value) return false;
+
+        NotificationItemResult result = (NotificationItemResult)type;
+        return result switch
+        {
+            NotificationItemResult.Success => level == prevLevel + 1,
+            NotificationItemResult.LevelDecrease => IsValidLevelDecrease(prevLevel, level),
+            NotificationItemResult.Destroyed => level == prevLevel,
+            _ => false
+        };
+    }
+
+    private static bool IsValidLevelDecrease(int prevLevel, int level)
+    {
+        int configuredDecrease = Mathf.Clamp(SyncedData.FailedEnchantLevelDecrease.Value, 1, 100);
+        return level == prevLevel || level == Mathf.Max(0, prevLevel - configuredDecrease);
     }
 
     private static bool TryResolveSenderPlayerName(long sender, out string playerName)
     {
         playerName = "";
         if (ZRoutedRpc.instance == null) return false;
-        object peer = ZRoutedRpc.instance.GetPeer(sender);
-        if (peer == null) return false;
+        ZNetPeer peer = ZRoutedRpc.instance.GetPeer(sender);
+        if (peer == null || !peer.IsReady() || peer.m_characterID.IsNone()) return false;
+        if (string.IsNullOrWhiteSpace(peer.m_playerName)) return false;
 
-        FieldInfo field = AccessTools.Field(peer.GetType(), "m_playerName");
-        if (field?.GetValue(peer) is string fieldValue && !string.IsNullOrWhiteSpace(fieldValue))
-        {
-            playerName = fieldValue;
-            return true;
-        }
-
-        PropertyInfo property = AccessTools.Property(peer.GetType(), "m_playerName");
-        if (property?.GetValue(peer) is string propertyValue && !string.IsNullOrWhiteSpace(propertyValue))
-        {
-            playerName = propertyValue;
-            return true;
-        }
-
-        return false;
+        playerName = peer.m_playerName;
+        return true;
     }
 
     private static bool IsAllowedByCooldown(long sender)
@@ -248,14 +280,8 @@ public static class Notifications_UI
 
     private static IEnumerable<string> GetWebhookTargets(NotificationItemResult type)
     {
-        ConfigEntry<string>[] sources = type is NotificationItemResult.Success ? _successWebhooks : _failWebhooks;
-        foreach (ConfigEntry<string> source in sources)
-        {
-            if (source == null) continue;
-            string link = (source.Value ?? "").Trim();
-            if (link.Length == 0) continue;
-            yield return link;
-        }
+        ConfigEntry<string> source = type is NotificationItemResult.Success ? _successWebhooks : _failureWebhooks;
+        return WebhookListConfig.ParseTargets(source.Value);
     }
 
     private static void TrySendDiscordNotification(string playerName, string itemPrefab, NotificationItemResult type, int prevLevel, int level)
@@ -272,7 +298,7 @@ public static class Notifications_UI
             _ => ""
         };
 
-        foreach (string link in GetWebhookTargets(type).Distinct(StringComparer.OrdinalIgnoreCase))
+        foreach (string link in GetWebhookTargets(type))
             DiscordWebhook.TrySend(link, text);
     }
 

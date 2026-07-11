@@ -29,23 +29,37 @@ internal static class EnchantmentChanceRepository
         OptimizeOverridesCache();
     }
 
-    public static bool TryReloadWeaponChances()
+    public static bool TryReloadAll()
     {
-        return EnchantmentYamlConfigSupport.TryReloadYamlConfig(
+        if (!EnchantmentYamlConfigSupport.TryReadYamlConfig(
             EnchantmentConfigPaths.ChancesWeaponsYaml,
-            SyncedData.Synced_EnchantmentChances_Weapons,
-            "weapon enchant chances");
-    }
+            "weapon enchant chances",
+            out Dictionary<int, SyncedData.Chance_Data> weapons))
+        {
+            return false;
+        }
 
-    public static bool TryReloadArmorChances()
-    {
-        return EnchantmentYamlConfigSupport.TryReloadYamlConfig(
+        if (!EnchantmentYamlConfigSupport.TryReadYamlConfig(
             EnchantmentConfigPaths.ChancesArmorYaml,
-            SyncedData.Synced_EnchantmentChances_Armor,
-            "armor enchant chances");
+            "armor enchant chances",
+            out Dictionary<int, SyncedData.Chance_Data> armor))
+        {
+            return false;
+        }
+
+        if (!EnchantmentYamlConfigSupport.TryReadYamlListDirectory(EnchantmentConfigPaths.OverrideChancesDirectory, out List<SyncedData.OverrideChances> overrides, out string error))
+        {
+            Utils.print($"Skipped reload for enchantment chance overrides: {error}", ConsoleColor.Red);
+            return false;
+        }
+
+        SyncedData.Synced_EnchantmentChances_Weapons.Value = weapons;
+        SyncedData.Synced_EnchantmentChances_Armor.Value = armor;
+        SyncedData.Overrides_EnchantmentChances.Value = overrides;
+        return true;
     }
 
-    public static bool TryReloadOverrides()
+    private static bool TryReloadOverrides()
     {
         if (!EnchantmentYamlConfigSupport.TryReadYamlListDirectory(EnchantmentConfigPaths.OverrideChancesDirectory, out List<SyncedData.OverrideChances> result, out string error))
         {

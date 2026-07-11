@@ -6,7 +6,6 @@ using kg.ValheimEnchantmentSystem.Misc;
 
 namespace kg.ValheimEnchantmentSystem;
 
-[VES_Autoload(VES_Autoload.Priority.Normal, "OnInit", typeof(SyncedData))]
 internal static class EquippedEnchantmentSnapshotService
 {
     internal sealed class Snapshot
@@ -58,7 +57,7 @@ internal static class EquippedEnchantmentSnapshotService
     private static int _globalRevision;
     private static bool _initialized;
 
-    private static void OnInit()
+    internal static void Initialize()
     {
         if (_initialized)
         {

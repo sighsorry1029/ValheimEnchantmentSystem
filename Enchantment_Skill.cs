@@ -4,12 +4,10 @@ using kg.ValheimEnchantmentSystem.Platform;
 
 namespace kg.ValheimEnchantmentSystem;
 
-[VES_Autoload]
 public static class Enchantment_Skill
 {
     public static Skills.SkillType SkillType_Enchantment;
-    [UsedImplicitly]
-    private static void OnInit()
+    internal static void Initialize()
     {
         SkillType_Enchantment = SkillRegistrationService.RegisterConfigurableSkill("kg_Enchantment", "enchantment.png");
     }

@@ -5,7 +5,6 @@ using Object = UnityEngine.Object;
 
 namespace kg.ValheimEnchantmentSystem.Items_Structures;
 
-[VES_Autoload(VES_Autoload.Priority.Normal, "OnInit")]
 public static class SkillScrollService
 {
     private const float InitializationRetryDelaySeconds = 0.2f;
@@ -13,15 +12,10 @@ public static class SkillScrollService
     private const string RoutedRequestConsume = "VES_RequestConsumeExpScroll_Server";
     private const string RoutedGrantConsume = "VES_GrantConsumeExpScroll_Client";
     private const string SkillScrollConsumedZdoKey = "VES_Consumed";
+    private const float MaxConsumeDistance = 6f;
     private static readonly Dictionary<char, ConfigEntry<int>> BookXpByTier = new();
     private static readonly List<GameObject> SkillScrollPrefabs = new();
     private static bool _initialized;
-
-    [UsedImplicitly]
-    private static void OnInit()
-    {
-        Initialize();
-    }
 
     public static void Initialize()
     {
@@ -29,13 +23,19 @@ public static class SkillScrollService
             return;
 
         _initialized = true;
+        int skillScrollExpOrder = 600;
         foreach (char tier in EnchantmentTierCatalog.AllTiers)
         {
             BookXpByTier[tier] = ValheimEnchantmentSystem.config(
                 "Skill Scrolls",
                 $"Skill EXP Scroll {tier}",
                 EnchantmentTierCatalog.GetDefaultSkillScrollExp(tier),
-                $"Skill EXP Scroll {tier}");
+                ConfigurationManagerDisplay.Description(
+                    $"Skill EXP granted by a tier {tier} skill scroll.",
+                    ConfigurationManagerDisplay.Skill,
+                    skillScrollExpOrder,
+                    $"Skill Scroll EXP {tier}"));
+            skillScrollExpOrder -= 10;
         }
     }
 
@@ -195,7 +195,69 @@ public static class SkillScrollService
             return;
         }
 
+        if (!CanSenderConsumeScroll(sender, zdo))
+        {
+            return;
+        }
+
         TryConsumeFromServer(zdo, prefab, sender);
+    }
+
+    private static bool CanSenderConsumeScroll(long sender, ZDO scrollZdo)
+    {
+        if (scrollZdo == null || ZRoutedRpc.instance == null || ZDOMan.instance == null || ZNetScene.instance == null)
+        {
+            return false;
+        }
+
+        GameObject liveScroll = ZNetScene.instance.FindInstance(scrollZdo.m_uid);
+        if (liveScroll == null || liveScroll.GetComponent<ExpScroll>() == null)
+        {
+            return false;
+        }
+
+        if (!TryGetSenderPosition(sender, out Vector3 senderPosition))
+        {
+            return false;
+        }
+
+        return (senderPosition - scrollZdo.GetPosition()).sqrMagnitude <= MaxConsumeDistance * MaxConsumeDistance;
+    }
+
+    private static bool TryGetSenderPosition(long sender, out Vector3 position)
+    {
+        position = default;
+        if (ZRoutedRpc.instance == null || ZDOMan.instance == null)
+        {
+            return false;
+        }
+
+        if (sender == ZRoutedRpc.instance.m_id)
+        {
+            Player localPlayer = Player.m_localPlayer;
+            if (localPlayer == null)
+            {
+                return false;
+            }
+
+            position = localPlayer.transform.position;
+            return true;
+        }
+
+        ZNetPeer peer = ZRoutedRpc.instance.GetPeer(sender);
+        if (peer == null || !peer.IsReady() || peer.m_characterID.IsNone())
+        {
+            return false;
+        }
+
+        ZDO playerZdo = ZDOMan.instance.GetZDO(peer.m_characterID);
+        if (playerZdo == null)
+        {
+            return false;
+        }
+
+        position = playerZdo.GetPosition();
+        return true;
     }
 
     private static void RPC_GrantConsume_Client(long sender, int expValue)
@@ -252,7 +314,6 @@ public static class SkillScrollService
 
         private ZNetView _znv = null!;
         private bool _expirationInitialized;
-        private int _initializationRetryCount;
 
         private int CreationTime
         {
@@ -277,13 +338,13 @@ public static class SkillScrollService
 
             if (_znv == null)
             {
-                ScheduleInitializationRetry("missing ZNetView component");
+                ScheduleInitializationRetry();
                 return;
             }
 
             if (!_znv.IsValid())
             {
-                ScheduleInitializationRetry("ZNetView is not yet valid");
+                ScheduleInitializationRetry();
                 return;
             }
 
@@ -307,9 +368,8 @@ public static class SkillScrollService
             ScheduleExpiration();
         }
 
-        private void ScheduleInitializationRetry(string reason)
+        private void ScheduleInitializationRetry()
         {
-            _initializationRetryCount++;
             Invoke(nameof(TryInitialize), InitializationRetryDelaySeconds);
         }
 

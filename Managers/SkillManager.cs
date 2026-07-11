@@ -8,6 +8,7 @@ using BepInEx;
 using BepInEx.Configuration;
 using HarmonyLib;
 using JetBrains.Annotations;
+using kg.ValheimEnchantmentSystem.Configs;
 using UnityEngine;
 
 namespace SkillManager;
@@ -228,11 +229,6 @@ public class Skill
 		harmony.Patch(AccessTools.DeclaredMethod(typeof(Skills), nameof(Skills.OnDeath)), new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Skill), nameof(Patch_Skills_OnDeath_Prefix))), finalizer: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Skill), nameof(Patch_Skills_OnDeath_Finalizer))));
 	}
 
-	private class ConfigurationManagerAttributes
-	{
-		[UsedImplicitly] public string? Category;
-	}
-
 	private static bool configBindingsInitialized;
 	private const string RequiredExperienceFormulaDescription = "Required EXP per level follows: ((current level + 1)^1.5) / 2 + 0.5.";
 
@@ -240,7 +236,7 @@ public class Skill
 
 	private static string GetConfigGroup(Skill skill) => IsEnchantmentSkill(skill) ? "Enchantment" : skill.internalSkillName;
 
-	private static string GetConfigCategory(Skill skill, string localizedName) => IsEnchantmentSkill(skill) ? "Enchantment" : localizedName;
+	private static string GetConfigCategory(Skill skill, string localizedName) => IsEnchantmentSkill(skill) ? ConfigurationManagerDisplay.Skill : localizedName;
 
 	private static string GetSkillKeyDescription(string skillKey) => $"Skill key: {skillKey}.";
 
@@ -362,18 +358,45 @@ public class Skill
 				string configGroup = GetConfigGroup(skill);
 				string configCategory = GetConfigCategory(skill, localizedName);
 
-				ConfigEntry<float> skillGain = config(configGroup, "Skill gain factor", skill.SkillGainFactor, new ConfigDescription($"The rate at which you gain experience for the skill. {GetSkillKeyDescription(nameKey)} {RequiredExperienceFormulaDescription}", new AcceptableValueRange<float>(0.01f, 5f), new ConfigurationManagerAttributes { Category = configCategory }));
+				ConfigEntry<float> skillGain = config(
+					configGroup,
+					"Skill gain factor",
+					skill.SkillGainFactor,
+					ConfigurationManagerDisplay.Description(
+						$"The rate at which you gain experience for the skill. {GetSkillKeyDescription(nameKey)} {RequiredExperienceFormulaDescription}",
+						configCategory,
+						IsEnchantmentSkill(skill) ? 1000 : null,
+						IsEnchantmentSkill(skill) ? "Skill Gain Factor" : null,
+						new AcceptableValueRange<float>(0.01f, 5f)));
 				skill.SkillGainFactor = skillGain.Value;
 				skillGain.SettingChanged += (_, _) => skill.SkillGainFactor = skillGain.Value;
 
 				if (!IsEnchantmentSkill(skill))
 				{
-					ConfigEntry<float> skillEffect = config(configGroup, "Skill effect factor", skill.SkillEffectFactor, new ConfigDescription("The power of the skill, based on the default power.", new AcceptableValueRange<float>(0.01f, 5f), new ConfigurationManagerAttributes { Category = configCategory }));
+					ConfigEntry<float> skillEffect = config(
+						configGroup,
+						"Skill effect factor",
+						skill.SkillEffectFactor,
+						ConfigurationManagerDisplay.Description(
+							"The power of the skill, based on the default power.",
+							configCategory,
+							null,
+							null,
+							new AcceptableValueRange<float>(0.01f, 5f)));
 					skill.SkillEffectFactor = skillEffect.Value;
 					skillEffect.SettingChanged += (_, _) => skill.SkillEffectFactor = skillEffect.Value;
 				}
 
-				ConfigEntry<int> skillLoss = config(configGroup, "Skill loss", skill.skillLoss, new ConfigDescription($"How much experience to lose on death. {GetSkillKeyDescription(nameKey)} {RequiredExperienceFormulaDescription}", new AcceptableValueRange<int>(0, 100), new ConfigurationManagerAttributes { Category = configCategory }));
+				ConfigEntry<int> skillLoss = config(
+					configGroup,
+					"Skill loss",
+					skill.skillLoss,
+					ConfigurationManagerDisplay.Description(
+						$"How much experience to lose on death. {GetSkillKeyDescription(nameKey)} {RequiredExperienceFormulaDescription}",
+						configCategory,
+						IsEnchantmentSkill(skill) ? 990 : null,
+						IsEnchantmentSkill(skill) ? "Skill Loss" : null,
+						new AcceptableValueRange<int>(0, 100)));
 				skill.skillLoss = skillLoss.Value;
 				skillLoss.SettingChanged += (_, _) => skill.skillLoss = skillLoss.Value;
 			}

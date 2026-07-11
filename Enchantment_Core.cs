@@ -3,13 +3,11 @@ using System.Text.RegularExpressions;
 using ItemDataManager;
 using JetBrains.Annotations;
 using kg.ValheimEnchantmentSystem.Configs;
-using kg.ValheimEnchantmentSystem.Integrations;
 using kg.ValheimEnchantmentSystem.Misc;
 using kg.ValheimEnchantmentSystem.UI;
 
 namespace kg.ValheimEnchantmentSystem;
 
-[VES_Autoload(VES_Autoload.Priority.Last, "OnInit", typeof(SyncedData), typeof(Enchantment_Skill), typeof(IntegrationRegistry), typeof(Notifications_UI), typeof(Enchantment_VFX))]
 public static class Enchantment_Core
 {
     private static readonly Regex ItemDurabilityRegex = new("(\\$item_durability.*)", RegexOptions.Compiled);
@@ -25,8 +23,7 @@ public static class Enchantment_Core
     private static readonly Regex ItemBlockArmorRegex = new("(\\$item_blockarmor.*)", RegexOptions.Compiled);
     private static readonly Regex ItemArmorRegex = new("(\\$item_armor.*)", RegexOptions.Compiled);
 
-    [UsedImplicitly]
-    private static void OnInit()
+    internal static void Initialize()
     {
         if (ValheimEnchantmentSystem.NoGraphics) return;
         AnimationSpeedManager.Add(ModifyAttackSpeed);
@@ -334,20 +331,42 @@ public static class Enchantment_Core
         {
             if (__instance.Data().Get<Enchanted>() is { level: > 0 } data && SyncedData.GetStatIncrease(data) is {} stats)
             {
-                __result.Modify(1 + stats.damage_percentage / 100f);
-                __result.m_blunt += stats.damage_blunt;
-                __result.m_slash += stats.damage_slash;
-                __result.m_pierce += stats.damage_pierce;
-                __result.m_fire += stats.damage_fire;
-                __result.m_frost += stats.damage_frost;
-                __result.m_lightning += stats.damage_lightning;
-                __result.m_poison += stats.damage_poison;
-                __result.m_spirit += stats.damage_spirit;
-                __result.m_damage += stats.damage_true;
-                __result.m_chop += stats.damage_chop;
-                __result.m_pickaxe += stats.damage_pickaxe;
+                ApplyDamageStats(ref __result, stats);
             }
         }
+    }
+
+    internal static bool HasDamageStats(SyncedData.Stat_Data stats)
+    {
+        return stats != null &&
+               (stats.damage_percentage != 0 ||
+                stats.damage_true != 0 ||
+                stats.damage_blunt != 0 ||
+                stats.damage_slash != 0 ||
+                stats.damage_pierce != 0 ||
+                stats.damage_chop != 0 ||
+                stats.damage_pickaxe != 0 ||
+                stats.damage_fire != 0 ||
+                stats.damage_frost != 0 ||
+                stats.damage_lightning != 0 ||
+                stats.damage_poison != 0 ||
+                stats.damage_spirit != 0);
+    }
+
+    internal static void ApplyDamageStats(ref HitData.DamageTypes damage, SyncedData.Stat_Data stats)
+    {
+        damage.Modify(1 + stats.damage_percentage / 100f);
+        damage.m_blunt += stats.damage_blunt;
+        damage.m_slash += stats.damage_slash;
+        damage.m_pierce += stats.damage_pierce;
+        damage.m_fire += stats.damage_fire;
+        damage.m_frost += stats.damage_frost;
+        damage.m_lightning += stats.damage_lightning;
+        damage.m_poison += stats.damage_poison;
+        damage.m_spirit += stats.damage_spirit;
+        damage.m_damage += stats.damage_true;
+        damage.m_chop += stats.damage_chop;
+        damage.m_pickaxe += stats.damage_pickaxe;
     }
     
     [HarmonyPatch(typeof(Player),nameof(Player.ApplyArmorDamageMods))]

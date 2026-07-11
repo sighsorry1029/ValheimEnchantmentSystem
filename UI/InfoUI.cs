@@ -4,7 +4,6 @@ using kg.ValheimEnchantmentSystem.Misc;
 
 namespace kg.ValheimEnchantmentSystem.UI;
 
-[VES_Autoload(VES_Autoload.Priority.Normal, "OnInit", typeof(SyncedData), typeof(VES_UI))]
 public static class Info_UI
 {
     private static InfoPanelView? _view;
@@ -12,8 +11,7 @@ public static class Info_UI
 
     public static bool IsVisible() => _controller?.IsVisible ?? false;
 
-    [UsedImplicitly]
-    private static void OnInit()
+    internal static void Initialize()
     {
         if (ValheimEnchantmentSystem.NoGraphics)
         {
@@ -26,7 +24,7 @@ public static class Info_UI
         UnityEngine.Object.DontDestroyOnLoad(uiRoot);
 
         _view = InfoPanelView.Attach(uiRoot);
-        _controller = new InfoPanelController(_view, elementPrefab, new InfoPanelQueryService(), VES_UI.PlayClick);
+        _controller = new InfoPanelController(_view, elementPrefab, VES_UI.PlayClick);
         OverlayUiHost.Register(new OverlayUiHost.PanelRegistration(
             "InfoPanel",
             IsVisible,
@@ -41,11 +39,6 @@ public static class Info_UI
     public static void Update()
     {
         _controller?.Update();
-    }
-
-    private static void Hide()
-    {
-        _controller?.Hide();
     }
 
 }

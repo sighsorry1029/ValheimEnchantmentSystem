@@ -10,6 +10,7 @@ public static class EnchantmentConfigPaths
     public static string StatsArmorYaml { get; private set; } = string.Empty;
     public static string ColorsYaml { get; private set; } = string.Empty;
     public static string RequirementsYaml { get; private set; } = string.Empty;
+    public static string ResourceMapYaml { get; private set; } = string.Empty;
     public static string OverrideChancesDirectory { get; private set; } = string.Empty;
     public static string OverrideStatsDirectory { get; private set; } = string.Empty;
     public static string OverrideColorsDirectory { get; private set; } = string.Empty;
@@ -28,6 +29,7 @@ public static class EnchantmentConfigPaths
         StatsArmorYaml = Path.Combine(configFolder, "EnchantmentStats_Armor.yml");
         ColorsYaml = Path.Combine(configFolder, "EnchantmentColors.yml");
         RequirementsYaml = Path.Combine(configFolder, "EnchantmentReqs.yml");
+        ResourceMapYaml = Path.Combine(configFolder, "resourcemap.yml");
         ChancesWeaponsYaml = Path.Combine(configFolder, "EnchantmentChances_Weapons.yml");
         ChancesArmorYaml = Path.Combine(configFolder, "EnchantmentChances_Armor.yml");
         AdditionalRequirementsDirectory = Path.Combine(configFolder, "AdditionalEnchantmentReqs");
@@ -46,6 +48,7 @@ public static class EnchantmentConfigPaths
         EnsureFile(StatsArmorYaml, Defaults.YAML_Stats_Armor);
         EnsureFile(ColorsYaml, Defaults.YAML_Colors);
         EnsureFile(RequirementsYaml, Defaults.YAML_Reqs);
+        EnsureFile(ResourceMapYaml, ResourceMapRequirementResolver.DefaultYaml);
     }
 
     private static void EnsureDirectory(string path)

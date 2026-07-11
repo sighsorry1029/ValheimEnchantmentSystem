@@ -8,11 +8,9 @@ using YamlDotNet.Serialization;
 
 namespace kg.ValheimEnchantmentSystem.Configs;
 
-[VES_Autoload(VES_Autoload.Priority.First)]
 public static class SyncedData
 {
-    [UsedImplicitly]
-    private static void OnInit()
+    internal static void Initialize()
     {
         EnchantmentSettings.Bind();
         EnchantmentConfigPaths.Initialize();

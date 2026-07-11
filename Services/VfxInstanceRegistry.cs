@@ -3,7 +3,6 @@ using kg.ValheimEnchantmentSystem.Misc;
 
 namespace kg.ValheimEnchantmentSystem;
 
-[VES_Autoload(VES_Autoload.Priority.Normal)]
 internal static class VfxInstanceRegistry
 {
     private static readonly Dictionary<int, VisEquipment> VisEquipments = new();
@@ -12,7 +11,7 @@ internal static class VfxInstanceRegistry
     private static readonly Dictionary<int, ArmorStand> ArmorStands = new();
     private static bool _initialized;
 
-    private static void OnInit()
+    internal static void Initialize()
     {
         if (_initialized)
         {

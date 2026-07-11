@@ -22,7 +22,6 @@ internal sealed class MainEnchantmentController
     private readonly Action _playClick;
     private readonly Action<InfoPanelCategory, string?> _showInfo;
     private readonly Func<bool> _isInfoVisible;
-    private readonly Func<bool> _showChanceHud;
     private readonly float _itemStartX;
     private readonly float _scrollStartX;
     private readonly float _startY;
@@ -47,8 +46,7 @@ internal sealed class MainEnchantmentController
         Func<int> animationDurationProvider,
         Action playClick,
         Action<InfoPanelCategory, string?> showInfo,
-        Func<bool> isInfoVisible,
-        Func<bool> showChanceHud)
+        Func<bool> isInfoVisible)
     {
         _view = view;
         _defaultQuestionMark = defaultQuestionMark;
@@ -63,7 +61,6 @@ internal sealed class MainEnchantmentController
         _playClick = playClick;
         _showInfo = showInfo;
         _isInfoVisible = isInfoVisible;
-        _showChanceHud = showChanceHud;
         _itemStartX = _view.ItemRect.anchoredPosition.x;
         _scrollStartX = _view.ScrollRect.anchoredPosition.x;
         _startY = _view.ScrollRect.anchoredPosition.y;
@@ -413,7 +410,7 @@ internal sealed class MainEnchantmentController
 
     private void SetChanceHudVisible(bool visible)
     {
-        _view.ChanceRoot.gameObject.SetActive(visible && _showChanceHud());
+        _view.ChanceRoot.gameObject.SetActive(visible);
     }
 
     private void UpdateItemTooltip(EnchantmentPreview? preview)
@@ -443,7 +440,7 @@ internal sealed class MainEnchantmentController
             return;
         }
 
-        if (!_showChanceHud() || preview?.Item == null)
+        if (preview?.Item == null)
         {
             _view.ChanceTooltip.enabled = false;
             _view.ChanceTooltip.m_topic = string.Empty;

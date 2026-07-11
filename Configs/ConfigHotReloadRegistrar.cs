@@ -1,5 +1,34 @@
 namespace kg.ValheimEnchantmentSystem.Configs;
 
+internal sealed class ConfigReloadDomain
+{
+    public string Name { get; }
+    public IReadOnlyList<string> Files { get; }
+    public IReadOnlyList<string> Directories { get; }
+    public Func<bool> Reload { get; }
+    public Func<bool> CanReload { get; }
+    public Func<bool> CanPoll { get; }
+    public float PollDebounceSeconds { get; }
+
+    public ConfigReloadDomain(
+        string name,
+        IEnumerable<string> files,
+        IEnumerable<string> directories,
+        Func<bool> reload,
+        Func<bool> canReload,
+        Func<bool>? canPoll = null,
+        float pollDebounceSeconds = 0f)
+    {
+        Name = name;
+        Files = (files ?? Array.Empty<string>()).ToArray();
+        Directories = (directories ?? Array.Empty<string>()).ToArray();
+        Reload = reload;
+        CanReload = canReload;
+        CanPoll = canPoll ?? canReload;
+        PollDebounceSeconds = Math.Max(0f, pollDebounceSeconds);
+    }
+}
+
 internal static class ConfigHotReloadRegistrar
 {
     private const float YamlPollDebounceSeconds = 1.5f;
@@ -20,26 +49,26 @@ internal static class ConfigHotReloadRegistrar
             "chance",
             new[] { EnchantmentConfigPaths.ChancesWeaponsYaml, EnchantmentConfigPaths.ChancesArmorYaml },
             new[] { EnchantmentConfigPaths.OverrideChancesDirectory },
-            ReloadChanceDomain,
+            EnchantmentChanceRepository.TryReloadAll,
             IsServerRuntime,
             pollDebounceSeconds: YamlPollDebounceSeconds));
         Add(new ConfigReloadDomain(
             "stat",
             new[] { EnchantmentConfigPaths.StatsWeaponsYaml, EnchantmentConfigPaths.StatsArmorYaml },
             new[] { EnchantmentConfigPaths.OverrideStatsDirectory },
-            ReloadStatDomain,
+            EnchantmentStatRepository.TryReloadAll,
             IsServerRuntime,
             pollDebounceSeconds: YamlPollDebounceSeconds));
         Add(new ConfigReloadDomain(
             "color",
             new[] { EnchantmentConfigPaths.ColorsYaml },
             new[] { EnchantmentConfigPaths.OverrideColorsDirectory },
-            ReloadColorDomain,
+            EnchantmentColorRepository.TryReloadAll,
             IsServerRuntime,
             pollDebounceSeconds: YamlPollDebounceSeconds));
         Add(new ConfigReloadDomain(
             "reqs",
-            new[] { EnchantmentConfigPaths.RequirementsYaml },
+            new[] { EnchantmentConfigPaths.RequirementsYaml, EnchantmentConfigPaths.ResourceMapYaml },
             new[] { EnchantmentConfigPaths.AdditionalRequirementsDirectory },
             ReloadRequirementDomain,
             IsServerRuntime,
@@ -178,32 +207,9 @@ internal static class ConfigHotReloadRegistrar
         };
     }
 
-    private static bool ReloadChanceDomain()
-    {
-        bool weapons = EnchantmentChanceRepository.TryReloadWeaponChances();
-        bool armor = EnchantmentChanceRepository.TryReloadArmorChances();
-        bool overrides = EnchantmentChanceRepository.TryReloadOverrides();
-        return weapons && armor && overrides;
-    }
-
-    private static bool ReloadStatDomain()
-    {
-        bool weapons = EnchantmentStatRepository.TryReloadWeaponStats();
-        bool armor = EnchantmentStatRepository.TryReloadArmorStats();
-        bool overrides = EnchantmentStatRepository.TryReloadOverrides();
-        return weapons && armor && overrides;
-    }
-
-    private static bool ReloadColorDomain()
-    {
-        bool colors = EnchantmentColorRepository.TryReloadColors();
-        bool overrides = EnchantmentColorRepository.TryReloadOverrides();
-        return colors && overrides;
-    }
-
     private static bool ReloadRequirementDomain()
     {
-        return EnchantmentRequirementRepository.TryReload(SyncedData.Synced_EnchantmentReqs);
+        return ResourceMapRequirementResolver.ReloadAuthoritativeRequirements();
     }
 
     private static bool IsServerRuntime()

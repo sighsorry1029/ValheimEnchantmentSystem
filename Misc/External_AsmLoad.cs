@@ -2,11 +2,9 @@ using JetBrains.Annotations;
 
 namespace kg.ValheimEnchantmentSystem.Misc;
 
-[VES_Autoload(VES_Autoload.Priority.Init)]
 public static class External_AsmLoad
 {
-    [UsedImplicitly]
-    private static void OnInit()
+    internal static void Initialize()
     {
         LoadAsm("VES_Scripts");
     }

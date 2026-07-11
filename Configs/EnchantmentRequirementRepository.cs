@@ -143,6 +143,30 @@ internal static class EnchantmentRequirementRepository
             }
         }
 
+        ResourceMapBuildStatus automaticStatus = ResourceMapRequirementResolver.BuildAutomaticRequirements(
+            out List<SyncedData.EnchantmentReqs> automaticRequirements,
+            out string automaticError,
+            out List<string> automaticWarnings);
+        warnings.AddRange(automaticWarnings);
+        if (automaticStatus == ResourceMapBuildStatus.Failed)
+        {
+            error = automaticError;
+            return false;
+        }
+
+        if (automaticStatus == ResourceMapBuildStatus.Success && automaticRequirements.Count > 0)
+        {
+            MergeRequirements(
+                automaticRequirements,
+                "automatic resource map",
+                result,
+                requirementsByOwner,
+                itemOwners,
+                warnings,
+                warnOnDuplicate: false);
+            loadedAnySource = true;
+        }
+
         if (!loadedAnySource)
         {
             error = warnings.Count > 0
@@ -315,7 +339,8 @@ internal static class EnchantmentRequirementRepository
         List<SyncedData.EnchantmentReqs> mergedRequirements,
         Dictionary<string, SyncedData.EnchantmentReqs> requirementsByOwner,
         Dictionary<string, string> itemOwners,
-        List<string> warnings)
+        List<string> warnings,
+        bool warnOnDuplicate = true)
     {
         foreach (SyncedData.EnchantmentReqs parsedRequirement in parsedRequirements)
         {
@@ -337,7 +362,11 @@ internal static class EnchantmentRequirementRepository
                 string normalizedItem = itemPrefab.Trim();
                 if (itemOwners.TryGetValue(normalizedItem, out string existingOwner))
                 {
-                    warnings.Add($"{source}: duplicate item prefab '{normalizedItem}' is mapped to both '{existingOwner}' and '{ownerLabel}'. Keeping '{existingOwner}'.");
+                    if (warnOnDuplicate)
+                    {
+                        warnings.Add($"{source}: duplicate item prefab '{normalizedItem}' is mapped to both '{existingOwner}' and '{ownerLabel}'. Keeping '{existingOwner}'.");
+                    }
+
                     continue;
                 }
 

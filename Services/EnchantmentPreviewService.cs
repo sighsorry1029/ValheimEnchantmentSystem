@@ -1,7 +1,6 @@
 using ItemDataManager;
 using System.Globalization;
 using kg.ValheimEnchantmentSystem.Configs;
-using kg.ValheimEnchantmentSystem.Integrations;
 using kg.ValheimEnchantmentSystem.UI;
 
 namespace kg.ValheimEnchantmentSystem;
@@ -65,12 +64,6 @@ public static class EnchantmentPreviewService
             return preview;
         }
 
-        if (!IntegrationRegistry.CanEnchant(item, out string compatibilityMessage))
-        {
-            preview.BlockedMessage = string.IsNullOrWhiteSpace(compatibilityMessage) ? "$enchantment_cannotbe".Localize() : compatibilityMessage;
-            return preview;
-        }
-
         if (SyncedData.GetReqs(itemPrefabName) == null)
         {
             preview.BlockedMessage = "$enchantment_cannotbe".Localize();
@@ -83,12 +76,6 @@ public static class EnchantmentPreviewService
             preview.IsMaxedOut = true;
             preview.BlockedMessage = "$enchantment_maxedout".Localize();
             preview.RequirementStatusText = preview.BlockedMessage;
-            return preview;
-        }
-
-        if (!EnchantmentDomainHelper.CanEnchant(item, currentLevel, itemPrefabName))
-        {
-            preview.BlockedMessage = ResolveBlockedMessage(item, itemPrefabName, currentLevel);
             return preview;
         }
 
@@ -193,23 +180,6 @@ public static class EnchantmentPreviewService
     private static string BuildItemLabel(string itemDisplayName, int currentLevel, string displayColor)
     {
         return $"{itemDisplayName} (<color={displayColor}>+{currentLevel}</color>)";
-    }
-
-    private static string ResolveBlockedMessage(ItemDrop.ItemData item, string itemPrefabName, int currentLevel)
-    {
-        if (item == null || string.IsNullOrWhiteSpace(itemPrefabName))
-        {
-            return string.Empty;
-        }
-
-        if (SyncedData.GetReqs(itemPrefabName) == null)
-        {
-            return "$enchantment_cannotbe".Localize();
-        }
-
-        return !SyncedData.IsLevelEnchantable(itemPrefabName, currentLevel, item.IsWeapon())
-            ? "$enchantment_maxedout".Localize()
-            : "$enchantment_cannotbe".Localize();
     }
 
     private static string BuildRequirementStatusText(string requirementDisplayName, int requirementCount, int requirementNeededCount)

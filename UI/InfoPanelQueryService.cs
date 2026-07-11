@@ -3,9 +3,9 @@ using kg.ValheimEnchantmentSystem.Items_Structures;
 
 namespace kg.ValheimEnchantmentSystem.UI;
 
-internal sealed class InfoPanelQueryService
+internal static class InfoPanelQueryService
 {
-    public List<InfoPanelEntryModel> GetEntries(InfoPanelCategory category, string? searchText)
+    public static List<InfoPanelEntryModel> GetEntries(InfoPanelCategory category, string? searchText)
     {
         if (!Player.m_localPlayer)
         {
@@ -21,7 +21,7 @@ internal sealed class InfoPanelQueryService
         };
     }
 
-    private List<InfoPanelEntryModel> GetRequirementEntries(string? searchText)
+    private static List<InfoPanelEntryModel> GetRequirementEntries(string? searchText)
     {
         List<InfoPanelEntryModel> entries = new();
         if (string.IsNullOrWhiteSpace(searchText))
@@ -47,7 +47,7 @@ internal sealed class InfoPanelQueryService
         return entries;
     }
 
-    private List<InfoPanelEntryModel> GetStatEntries(string? searchText)
+    private static List<InfoPanelEntryModel> GetStatEntries(string? searchText)
     {
         List<InfoPanelEntryModel> entries = new();
         if (string.IsNullOrWhiteSpace(searchText))
@@ -76,7 +76,7 @@ internal sealed class InfoPanelQueryService
         return entries;
     }
 
-    private List<InfoPanelEntryModel> GetChanceEntries(string? searchText)
+    private static List<InfoPanelEntryModel> GetChanceEntries(string? searchText)
     {
         List<InfoPanelEntryModel> entries = new();
         if (string.IsNullOrWhiteSpace(searchText))
@@ -127,7 +127,7 @@ internal sealed class InfoPanelQueryService
         };
     }
 
-    private InfoPanelEntryModel? CreateEntry(IEnumerable<string>? prefabs, string text, string? found, string? additionalText)
+    private static InfoPanelEntryModel? CreateEntry(IEnumerable<string>? prefabs, string text, string? found, string? additionalText)
     {
         InfoPanelEntryModel entry = new()
         {
@@ -148,7 +148,7 @@ internal sealed class InfoPanelQueryService
         return entry;
     }
 
-    private IEnumerable<InfoPanelIconModel> BuildIcons(IEnumerable<string> prefabs, string? found)
+    private static IEnumerable<InfoPanelIconModel> BuildIcons(IEnumerable<string> prefabs, string? found)
     {
         foreach (string prefab in prefabs)
         {

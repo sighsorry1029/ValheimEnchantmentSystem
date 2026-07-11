@@ -4,17 +4,15 @@ internal sealed class InfoPanelController
 {
     private readonly InfoPanelView _view;
     private readonly GameObject _elementPrefab;
-    private readonly InfoPanelQueryService _queryService;
     private readonly Action _playClick;
     private bool _suppressRender;
     private GameObject? _tooltipPrefab;
     private InfoPanelCategory _currentCategory = InfoPanelCategory.Reqs;
 
-    public InfoPanelController(InfoPanelView view, GameObject elementPrefab, InfoPanelQueryService queryService, Action playClick)
+    public InfoPanelController(InfoPanelView view, GameObject elementPrefab, Action playClick)
     {
         _view = view;
         _elementPrefab = elementPrefab;
-        _queryService = queryService;
         _playClick = playClick;
 
         _view.Search.onValueChanged.RemoveAllListeners();
@@ -111,7 +109,7 @@ internal sealed class InfoPanelController
             return;
         }
 
-        List<InfoPanelEntryModel> entries = _queryService.GetEntries(_currentCategory, _view.Search.text);
+        List<InfoPanelEntryModel> entries = InfoPanelQueryService.GetEntries(_currentCategory, _view.Search.text);
         foreach (InfoPanelEntryModel entry in entries)
         {
             InfoEntryView entryView = InfoEntryView.Attach(UnityEngine.Object.Instantiate(_elementPrefab, _view.Content));

@@ -8,7 +8,6 @@ using UnityEngine.Audio;
 
 namespace kg.ValheimEnchantmentSystem.UI;
 
-[VES_Autoload(VES_Autoload.Priority.Normal, "OnInit", typeof(SyncedData))]
 public static class VES_UI
 {
     private static AudioSource? AUsrc;
@@ -52,8 +51,7 @@ public static class VES_UI
 
     public static bool IsVisible() => _controller?.IsVisible ?? false;
 
-    [UsedImplicitly]
-    private static void OnInit()
+    internal static void Initialize()
     {
         if (ValheimEnchantmentSystem.NoGraphics)
         {
@@ -64,12 +62,20 @@ public static class VES_UI
             string.Empty,
             "EnchantmentAnimationDuration",
             1,
-            new ConfigDescription("Duration of the enchantment animation in seconds. Values outside 1-5 are clamped at runtime."));
+            ConfigurationManagerDisplay.Description(
+                "Duration of the enchantment animation in seconds. Values outside 1-5 are clamped at runtime.",
+                ConfigurationManagerDisplay.Client,
+                990,
+                "UI - Enchantment Animation Duration"));
         _gamepadShortcut = ValheimEnchantmentSystem.ClientConfig(
             "UI",
             "GamepadShortcut",
             GamepadShortcutButton.JoyButtonX,
-            new ConfigDescription("Controller shortcut assigned to the enchantment inventory button. Change this if it conflicts with repair; set to Disabled to remove the shortcut."));
+            ConfigurationManagerDisplay.Description(
+                "Controller shortcut assigned to the enchantment inventory button. Change this if it conflicts with repair; set to Disabled to remove the shortcut.",
+                ConfigurationManagerDisplay.Client,
+                1000,
+                "UI - Gamepad Shortcut"));
         _gamepadShortcut.SettingChanged += (_, _) => ApplyEnchantmentGamepadShortcut();
         _oneSecondClip = ValheimEnchantmentSystem._asset.LoadAsset<AudioClip>("kg_EnchantmentSound_Main_1");
         _threeSecondClip = ValheimEnchantmentSystem._asset.LoadAsset<AudioClip>("kg_EnchantmentSound_Main_3");
@@ -98,8 +104,7 @@ public static class VES_UI
             () => Mathf.Clamp(_enchantmentAnimationDuration.Value, 1, 5),
             PlayClick,
             Info_UI.Show,
-            Info_UI.IsVisible,
-            () => true);
+            Info_UI.IsVisible);
         OverlayUiHost.Register(new OverlayUiHost.PanelRegistration(
             "Enchantment",
             IsVisible,

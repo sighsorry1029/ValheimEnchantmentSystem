@@ -1,16 +1,9 @@
-![](https://i.imgur.com/nRGWth9.png)
-
-Like my mods? Support me: `war3spells@gmail.com` (Paypal)
-
-### Mod brings old MMORPG's equipment enchantment experience to Valheim.
-
-<details>
-  <summary><b><span style="color:aqua;font-weight:200;font-size:20px">
-    Patchnotes
-</span></b></summary>
+# Changelog
 
 | Version | UpdateNotes |
 |---|---|
+| 1.9.10 | - Reorganized Configuration Manager settings into ordered General, Enchantment, Skill, Scrolls, Biome Tiers, Notifications, Client, and Scroll Recipes sections; scroll recipes now use the `[8 - Scroll Recipes]` cfg section and the old `[Scroll Recipes]` section is no longer read<br/>- Replaced the six fixed webhook slots with comma-separated Success Webhooks and Failure Webhooks lists supporting any number of unique server-only targets<br/>- Added resourcemap.yml to assign enchantment scroll requirements automatically from equipment crafting materials, with explicit EnchantmentReqs.yml entries taking priority<br/>- Integrated built-in and Expand World Data custom biome tiers with automatic resource-map rebuilding when tier mappings change<br/>- Grouped enchant skill EXP and skill-scroll drop/EXP settings together and hardened skill-scroll consumption with live-object and player-distance validation on the server<br/>- Hardened global notification requests by validating the sender, enchantable item, configured minimum level, and allowed enchantment result transition<br/>- Made chance, stat, and color YAML hot reloads atomic so an invalid base or override file cannot partially replace the active configuration<br/>- Fixed inventory enchant and scroll-combine overlays retaining stale or duplicate state between sessions, and prevented scroll inputs from being consumed when the output prefab is unavailable<br/>- Replaced reflection-based module autoloading with explicit dependency-aware initialization for more predictable startup and patch registration |
+| 1.9.9 | - Blood Magic summons now inherit the damage-percent enchantment bonus from the summoning weapon<br/>- Added StaffRedTroll and StaffSkeleton to the default enchantment requirements |
 | 1.9.8 | - Added configurable failed-enchant level loss<br/>- Added maxed-out UI for YAML-defined enchant caps<br/>- Added clearer failure chance details<br/>- Fixed enchant rolls to match the displayed two-decimal chance |
 | 1.9.7 | - Added controller support for enchant button |
 | 1.9.6 | - Added ZenUI compatibility for changing scroll recipes |
@@ -59,9 +52,3 @@ Like my mods? Support me: `war3spells@gmail.com` (Paypal)
 | 1.2.0 | - Replaced Override .yml files to affect groups of items instead of individual items<br/>- Note: Please remove old Override_yml files so they can be recreated |
 | 1.1.0 | - Added 4 directories for Override and Requirements additional .yml files |
 | 1.0.0 | - Mod released |
-</details>
-
-## Guides and description here: https://kg.sayless.eu/ves/
-
-####  Questions or Comments, find KG in the Odin Plus Discord:
-[![https://i.imgur.com/XXP6HCU.png](https://i.imgur.com/XXP6HCU.png)](https://discord.gg/5gXNxNkUBt)

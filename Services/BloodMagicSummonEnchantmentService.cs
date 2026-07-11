@@ -32,7 +32,7 @@ internal static class BloodMagicSummonEnchantmentService
         }
 
         SyncedData.Stat_Data stats = SyncedData.GetStatIncrease(sourcePrefab, enchantment.level, true);
-        if (!HasDamageStats(stats))
+        if (!Enchantment_Core.HasDamageStats(stats))
         {
             return false;
         }
@@ -63,40 +63,7 @@ internal static class BloodMagicSummonEnchantmentService
         }
 
         stats = SyncedData.GetStatIncrease(sourcePrefab, sourceLevel, true);
-        return HasDamageStats(stats);
-    }
-
-    private static bool HasDamageStats(SyncedData.Stat_Data stats)
-    {
-        return stats != null &&
-               (stats.damage_percentage != 0 ||
-                stats.damage_true != 0 ||
-                stats.damage_blunt != 0 ||
-                stats.damage_slash != 0 ||
-                stats.damage_pierce != 0 ||
-                stats.damage_chop != 0 ||
-                stats.damage_pickaxe != 0 ||
-                stats.damage_fire != 0 ||
-                stats.damage_frost != 0 ||
-                stats.damage_lightning != 0 ||
-                stats.damage_poison != 0 ||
-                stats.damage_spirit != 0);
-    }
-
-    private static void ApplyDamageStats(HitData hit, SyncedData.Stat_Data stats)
-    {
-        hit.m_damage.Modify(1 + stats.damage_percentage / 100f);
-        hit.m_damage.m_blunt += stats.damage_blunt;
-        hit.m_damage.m_slash += stats.damage_slash;
-        hit.m_damage.m_pierce += stats.damage_pierce;
-        hit.m_damage.m_fire += stats.damage_fire;
-        hit.m_damage.m_frost += stats.damage_frost;
-        hit.m_damage.m_lightning += stats.damage_lightning;
-        hit.m_damage.m_poison += stats.damage_poison;
-        hit.m_damage.m_spirit += stats.damage_spirit;
-        hit.m_damage.m_damage += stats.damage_true;
-        hit.m_damage.m_chop += stats.damage_chop;
-        hit.m_damage.m_pickaxe += stats.damage_pickaxe;
+        return Enchantment_Core.HasDamageStats(stats);
     }
 
     [HarmonyPatch(typeof(SpawnAbility), nameof(SpawnAbility.SetupAoe))]
@@ -143,7 +110,7 @@ internal static class BloodMagicSummonEnchantmentService
                 return;
             }
 
-            ApplyDamageStats(hit, stats);
+            Enchantment_Core.ApplyDamageStats(ref hit.m_damage, stats);
         }
     }
 }

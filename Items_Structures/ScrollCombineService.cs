@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using JetBrains.Annotations;
+using kg.ValheimEnchantmentSystem.Configs;
 using kg.ValheimEnchantmentSystem.Integrations;
 using Object = UnityEngine.Object;
 
@@ -8,18 +9,13 @@ namespace kg.ValheimEnchantmentSystem.Items_Structures;
 
 internal static class ScrollCombineService
 {
-    private const int AllowCombineOrder = 1000;
-    private const int RequiredShapeOrder = 999;
+    private const int AllowCombineOrder = 940;
+    private const int RequiredShapeOrder = 930;
 
     private enum RequiredShape
     {
         [Description("three in a row")] Row3,
         [Description("five in a cross")] Cross5
-    }
-
-    private sealed class ConfigurationManagerAttributes
-    {
-        [UsedImplicitly] public int? Order;
     }
 
     private sealed class OverlayRefs
@@ -82,15 +78,31 @@ internal static class ScrollCombineService
             "Scrolls",
             "Allow Combine",
             true,
-            OrderedDescription("Allow combining scrolls by arranging those in a certain shape and right-clicking the center.", AllowCombineOrder));
+            ConfigurationManagerDisplay.Description(
+                "Allow combining scrolls by arranging those in a certain shape and right-clicking the center.",
+                ConfigurationManagerDisplay.Scrolls,
+                AllowCombineOrder,
+                "Allow Combine"));
         _requiredShape = ValheimEnchantmentSystem.config(
             "Scrolls",
             "Required Shape",
             RequiredShape.Cross5,
-            OrderedDescription("what shape of the same items is required to combine", RequiredShapeOrder));
+            ConfigurationManagerDisplay.Description(
+                "What shape of matching scrolls is required to combine them.",
+                ConfigurationManagerDisplay.Scrolls,
+                RequiredShapeOrder,
+                "Required Combine Shape"));
         _combineOutline = ValheimEnchantmentSystem._asset.LoadAsset<GameObject>("Enchantment_CombinePart");
         _allowScrollCombine.SettingChanged += (_, _) => RequestRefreshAll();
         _requiredShape.SettingChanged += (_, _) => RequestRefreshAll();
+        EngineEvents.MainMenuAwake += OnMainMenuAwake;
+    }
+
+    private static void OnMainMenuAwake(FejdStartup _)
+    {
+        InitializedElementPrefabs.Clear();
+        GridStates.Clear();
+        GridIdsByInventory.Clear();
     }
 
     public static void AttachCombineOutline(InventoryGrid inventoryGrid)
@@ -102,11 +114,14 @@ internal static class ScrollCombineService
 
         if (InitializedElementPrefabs.Add(inventoryGrid.m_elementPrefab))
         {
-            GameObject newIcon = Object.Instantiate(_combineOutline);
-            newIcon.transform.SetParent(inventoryGrid.m_elementPrefab.transform, false);
-            newIcon.name = "VES_Combine";
-            newIcon.GetComponent<RectTransform>().anchoredPosition = Vector2.zero;
-            newIcon.SetActive(false);
+            if (inventoryGrid.m_elementPrefab.transform.Find("VES_Combine") == null)
+            {
+                GameObject newIcon = Object.Instantiate(_combineOutline);
+                newIcon.transform.SetParent(inventoryGrid.m_elementPrefab.transform, false);
+                newIcon.name = "VES_Combine";
+                newIcon.GetComponent<RectTransform>().anchoredPosition = Vector2.zero;
+                newIcon.SetActive(false);
+            }
         }
 
         _ = GetOrCreateGridState(inventoryGrid);
@@ -380,18 +395,25 @@ internal static class ScrollCombineService
             return;
         }
 
-        if (!TryConsumePattern(itemAt, inventoryGrid.m_inventory, out int amountToInstantiate))
-        {
-            return;
-        }
-
         string currentPrefabName = itemAt.m_dropPrefab.name;
         if (!ScrollRegistry.TryGetUpgradePrefabName(currentPrefabName, out string upgradedPrefabName))
         {
             return;
         }
 
-        Utils.InstantiateItem(ZNetScene.instance.GetPrefab(upgradedPrefabName), amountToInstantiate, 1, inventoryGrid.m_inventory);
+        GameObject upgradedPrefab = ZNetScene.instance?.GetPrefab(upgradedPrefabName);
+        if (upgradedPrefab == null || upgradedPrefab.GetComponent<ItemDrop>() == null)
+        {
+            Utils.print($"Cannot combine {currentPrefabName}: output prefab {upgradedPrefabName} is not registered.", ConsoleColor.Red);
+            return;
+        }
+
+        if (!TryConsumePattern(itemAt, inventoryGrid.m_inventory, out int amountToInstantiate))
+        {
+            return;
+        }
+
+        Utils.InstantiateItem(upgradedPrefab, amountToInstantiate, 1, inventoryGrid.m_inventory);
         RequestRefresh(inventoryGrid.m_inventory);
         UI.VES_UI.PlayClick();
     }
@@ -409,11 +431,6 @@ internal static class ScrollCombineService
     public static string GetCombineInstructionText()
     {
         return "$enchantment_putinlinetocombine".Localize(GetRequiredShapeMarkup());
-    }
-
-    private static ConfigDescription OrderedDescription(string description, int order)
-    {
-        return new ConfigDescription(description, null, new ConfigurationManagerAttributes { Order = order });
     }
 
     private static string GetRequiredShapeMarkup()

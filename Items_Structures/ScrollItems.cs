@@ -4,11 +4,9 @@ using kg.ValheimEnchantmentSystem.UI;
 
 namespace kg.ValheimEnchantmentSystem.Items_Structures;
 
-[VES_Autoload(VES_Autoload.Priority.Last, "OnInit", typeof(VES_UI), typeof(Enchantment_Skill))]
 public static class ScrollItems
 {
-    [UsedImplicitly]
-    private static void OnInit()
+    internal static void Initialize()
     {
         ScrollStationBootstrap.Initialize();
         ScrollCombineService.Initialize();

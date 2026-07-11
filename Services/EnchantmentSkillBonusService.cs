@@ -13,6 +13,9 @@ public static class EnchantmentSkillBonusService
         }
 
         float enchantmentLevel = sourcePlayer.GetSkillLevel(Enchantment_Skill.SkillType_Enchantment);
-        return enchantmentLevel * SyncedData.AdditionalEnchantmentChancePerLevel.Value;
+        return CalculateAdditionalEnchantmentChance(enchantmentLevel, SyncedData.AdditionalEnchantmentChancePerLevel.Value);
     }
+
+    internal static float CalculateAdditionalEnchantmentChance(float skillLevel, float chancePerLevel) =>
+        skillLevel * chancePerLevel;
 }

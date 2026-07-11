@@ -5,7 +5,6 @@ using kg.ValheimEnchantmentSystem.Misc;
 
 namespace kg.ValheimEnchantmentSystem.Items_Structures;
 
-[VES_Autoload(VES_Autoload.Priority.Normal, "OnInit", typeof(IntegrationRegistry))]
 public static class BiomeTierResolver
 {
     private const string ExpandWorldBiomeDirectoryName = "expand_world";
@@ -16,11 +15,7 @@ public static class BiomeTierResolver
     private static readonly Dictionary<string, Heightmap.Biome> LoggedResolvedCustomBiomeNumbersByIdentifier = new(StringComparer.OrdinalIgnoreCase);
     private static bool _initialized;
 
-    [UsedImplicitly]
-    private static void OnInit()
-    {
-        Initialize();
-    }
+    internal static event Action? TierMappingsChanged;
 
     public static void Initialize()
     {
@@ -40,6 +35,28 @@ public static class BiomeTierResolver
             return false;
 
         return TryResolveTier(ResolveBiome(character.transform.position), out tier);
+    }
+
+    internal static bool TryResolveTierByIdentifier(string biomeIdentifier, out char tier)
+    {
+        tier = default;
+        if (string.IsNullOrWhiteSpace(biomeIdentifier))
+            return false;
+
+        string builtInIdentifier = new(biomeIdentifier.Where(char.IsLetterOrDigit).ToArray());
+        if (Enum.TryParse(builtInIdentifier, true, out Heightmap.Biome builtInBiome) &&
+            EnchantmentTierCatalog.IsBuiltInBiome(builtInBiome))
+        {
+            return TryResolveTier(builtInBiome, out tier);
+        }
+
+        if (!TryNormalizeCustomBiomeIdentifier(biomeIdentifier, out string customIdentifier) ||
+            !CustomBiomeTierByIdentifier.TryGetValue(customIdentifier, out ConfigEntry<string> customTier))
+        {
+            return false;
+        }
+
+        return EnchantmentTierCatalog.TryParse(customTier.Value, out tier);
     }
 
     public static bool TryResolveTier(Heightmap.Biome biome, out char tier)
@@ -97,7 +114,20 @@ public static class BiomeTierResolver
 
         string name = GetBuiltInBiomeConfigName(biome);
         string description = $"Tier of scrolls {biome} (F E D C B A S)";
-        BuiltInBiomeTiers[biome] = ValheimEnchantmentSystem.config("Scrolls", name, defaultTier.ToString(), description);
+        string displayName = name
+            .Replace("BlackForest", "Black Forest")
+            .Replace("DeepNorth", "Deep North");
+        ConfigEntry<string> configEntry = ValheimEnchantmentSystem.config(
+            "Scrolls",
+            name,
+            defaultTier.ToString(),
+            ConfigurationManagerDisplay.Description(
+                description,
+                ConfigurationManagerDisplay.BiomeTiers,
+                GetBuiltInBiomeDisplayOrder(biome),
+                displayName));
+        configEntry.SettingChanged += (_, _) => TierMappingsChanged?.Invoke();
+        BuiltInBiomeTiers[biome] = configEntry;
     }
 
     private static string GetBuiltInBiomeConfigName(Heightmap.Biome biome)
@@ -114,6 +144,23 @@ public static class BiomeTierResolver
             Heightmap.Biome.AshLands => "8 - Ashlands Tier",
             Heightmap.Biome.DeepNorth => "9 - DeepNorth Tier",
             _ => $"{biome} Tier"
+        };
+    }
+
+    private static int GetBuiltInBiomeDisplayOrder(Heightmap.Biome biome)
+    {
+        return biome switch
+        {
+            Heightmap.Biome.Meadows => 1000,
+            Heightmap.Biome.BlackForest => 990,
+            Heightmap.Biome.Swamp => 980,
+            Heightmap.Biome.Ocean => 970,
+            Heightmap.Biome.Mountain => 960,
+            Heightmap.Biome.Plains => 950,
+            Heightmap.Biome.Mistlands => 940,
+            Heightmap.Biome.AshLands => 930,
+            Heightmap.Biome.DeepNorth => 920,
+            _ => 900
         };
     }
 
@@ -228,7 +275,7 @@ public static class BiomeTierResolver
                     continue;
                 }
 
-                identifiers.Add(identifier);
+                identifiers.Add(SanitizeCustomBiomeIdentifier(entry.biome));
             }
         }
 
@@ -289,9 +336,25 @@ public static class BiomeTierResolver
             return false;
         }
 
-        string label = $"Custom - {identifier} Tier";
-        string description = $"Tier of scrolls {rawIdentifier} (ExpandWorldData custom biome identifier, use F E D C B A S)";
-        configEntry = ValheimEnchantmentSystem.config("Scrolls", label, string.Empty, description);
+        string configKey = $"Custom - {identifier} Tier";
+        string displayIdentifier = SanitizeCustomBiomeIdentifier(rawIdentifier);
+        if (displayIdentifier.Length == 0)
+        {
+            displayIdentifier = identifier;
+        }
+
+        string displayName = $"Custom - {displayIdentifier} Tier";
+        string description = $"Tier of scrolls {displayIdentifier} (ExpandWorldData custom biome identifier, use F E D C B A S)";
+        configEntry = ValheimEnchantmentSystem.config(
+            "Scrolls",
+            configKey,
+            string.Empty,
+            ConfigurationManagerDisplay.Description(
+                description,
+                ConfigurationManagerDisplay.BiomeTiers,
+                800,
+                displayName));
+        configEntry.SettingChanged += (_, _) => TierMappingsChanged?.Invoke();
         CustomBiomeTierByIdentifier[identifier] = configEntry;
         return true;
     }
@@ -315,7 +378,12 @@ public static class BiomeTierResolver
 
     private static string NormalizeCustomBiomeIdentifier(string identifier)
     {
-        return identifier.Replace('\r', ' ').Replace('\n', ' ').Trim().ToLowerInvariant();
+        return SanitizeCustomBiomeIdentifier(identifier).ToLowerInvariant();
+    }
+
+    private static string SanitizeCustomBiomeIdentifier(string identifier)
+    {
+        return (identifier ?? string.Empty).Replace('\r', ' ').Replace('\n', ' ').Trim();
     }
 
     private static bool IsBuiltInBiomeIdentifier(string identifier)

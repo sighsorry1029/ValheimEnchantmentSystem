@@ -1,5 +1,6 @@
 namespace kg.ValheimEnchantmentSystem.Misc;
 
+// Retained for binary compatibility; VES modules now use explicit initialization.
 [AttributeUsage(AttributeTargets.Class, Inherited = false)]
 public class VES_Autoload : Attribute
 {

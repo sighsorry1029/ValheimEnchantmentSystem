@@ -1,6 +1,5 @@
 using ItemDataManager;
 using kg.ValheimEnchantmentSystem.Configs;
-using kg.ValheimEnchantmentSystem.Integrations;
 using kg.ValheimEnchantmentSystem.UI;
 using Random = UnityEngine.Random;
 
@@ -88,12 +87,6 @@ public static class EnchantmentService
         }
 
         ItemDrop.ItemData item = enchantment.Item;
-        if (!IntegrationRegistry.CanEnchant(item, out string compatibilityMessage))
-        {
-            result.Message = string.IsNullOrWhiteSpace(compatibilityMessage) ? "$enchantment_cannotbe".Localize() : compatibilityMessage;
-            return result;
-        }
-
         if (!EnchantmentDomainHelper.CanEnchant(item, enchantment.level, result.ItemPrefabName))
         {
             result.Message = "$enchantment_cannotbe".Localize();
@@ -272,8 +265,6 @@ internal static class EnchantmentRules
             player,
             useBlessedScroll,
             blessedScrollPreventsBreak);
-        bool destroy = RollPercent(preview.DestroyChance);
-
         if (RollPercent(preview.FinalChance))
         {
             return new EnchantmentDecision(EnchantmentOutcome.Success, currentLevel + 1, Notifications_UI.NotificationItemResult.Success);
@@ -284,25 +275,35 @@ internal static class EnchantmentRules
             return new EnchantmentDecision(EnchantmentOutcome.NoChange, currentLevel, Notifications_UI.NotificationItemResult.LevelDecrease);
         }
 
+        return DecideFailure(
+            preview,
+            currentLevel,
+            Random.Range(0f, 100f),
+            Mathf.Clamp(SyncedData.FailedEnchantLevelDecrease.Value, 1, 100));
+    }
+
+    internal static EnchantmentDecision DecideFailure(EnchantmentRulePreview preview, int currentLevel, double destroyRoll, int levelDecrease)
+    {
+        bool destroy = IsRollSuccessful(preview.DestroyChance, destroyRoll);
         return preview.FailureType switch
         {
             SyncedData.ItemDesctructionTypeEnum.Destroy => new EnchantmentDecision(EnchantmentOutcome.Destroyed, currentLevel, Notifications_UI.NotificationItemResult.Destroyed),
             SyncedData.ItemDesctructionTypeEnum.Combined => destroy
                 ? new EnchantmentDecision(EnchantmentOutcome.Destroyed, currentLevel, Notifications_UI.NotificationItemResult.Destroyed)
-                : CreateLevelDecreaseDecision(currentLevel),
+                : CreateLevelDecreaseDecision(currentLevel, levelDecrease),
             SyncedData.ItemDesctructionTypeEnum.CombinedEasy => destroy
-                ? CreateLevelDecreaseDecision(currentLevel)
+                ? CreateLevelDecreaseDecision(currentLevel, levelDecrease)
                 : new EnchantmentDecision(EnchantmentOutcome.NoChange, currentLevel, Notifications_UI.NotificationItemResult.LevelDecrease),
-            _ => CreateLevelDecreaseDecision(currentLevel)
+            _ => CreateLevelDecreaseDecision(currentLevel, levelDecrease)
         };
     }
 
-    private static EnchantmentDecision CreateLevelDecreaseDecision(int currentLevel)
+    private static EnchantmentDecision CreateLevelDecreaseDecision(int currentLevel, int levelDecrease)
     {
-        int decrease = Mathf.Clamp(SyncedData.FailedEnchantLevelDecrease.Value, 1, 100);
+        int decrease = Math.Min(100, Math.Max(1, levelDecrease));
         return new EnchantmentDecision(
             EnchantmentOutcome.LevelDecrease,
-            Mathf.Max(0, currentLevel - decrease),
+            Math.Max(0, currentLevel - decrease),
             Notifications_UI.NotificationItemResult.LevelDecrease);
     }
 
@@ -317,12 +318,17 @@ internal static class EnchantmentRules
         };
     }
 
-    private static double NormalizePercentChance(double chance)
+    internal static double NormalizePercentChance(double chance)
     {
         return Math.Round(Math.Min(100d, Math.Max(0d, chance)), 2, MidpointRounding.AwayFromZero);
     }
 
     private static bool RollPercent(double chance)
+    {
+        return IsRollSuccessful(chance, Random.Range(0f, 100f));
+    }
+
+    internal static bool IsRollSuccessful(double chance, double roll)
     {
         double normalizedChance = NormalizePercentChance(chance);
         if (normalizedChance <= 0d)
@@ -335,7 +341,7 @@ internal static class EnchantmentRules
             return true;
         }
 
-        return Random.Range(0f, 100f) < normalizedChance;
+        return roll < normalizedChance;
     }
 }
 
@@ -352,7 +358,6 @@ public static class EnchantmentSideEffects
 
         if (result.LevelChanged && !result.Destroyed)
         {
-            IntegrationRegistry.ApplyEnchantState(result.Enchantment);
             if (ValheimEnchantmentSystem._thistype != null && result.Enchantment?.Item != null)
             {
                 ValheimEnchantmentSystem._thistype.StartCoroutine(Enchantment_Core.FrameSkipEquip(result.Enchantment.Item));
@@ -389,7 +394,6 @@ public static class EnchantmentSideEffects
                 return;
             }
 
-            IntegrationRegistry.ApplyEnchantUpgradedState(enchantment);
             Enchantment_VFX.UpdateGrid();
         }, 1);
     }
@@ -401,7 +405,6 @@ public static class EnchantmentSideEffects
             return;
         }
 
-        IntegrationRegistry.ApplyEnchantState(enchantment);
         Enchantment_VFX.UpdateGrid();
 
         if (refreshEquipment && ValheimEnchantmentSystem._thistype != null && enchantment.Item != null)

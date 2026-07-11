@@ -24,15 +24,28 @@ internal static class EnchantmentColorRepository
         OptimizeOverridesCache();
     }
 
-    public static bool TryReloadColors()
+    public static bool TryReloadAll()
     {
-        return EnchantmentYamlConfigSupport.TryReloadYamlConfig(
+        if (!EnchantmentYamlConfigSupport.TryReadYamlConfig(
             EnchantmentConfigPaths.ColorsYaml,
-            SyncedData.Synced_EnchantmentColors,
-            "enchantment colors");
+            "enchantment colors",
+            out Dictionary<int, SyncedData.VFX_Data> colors))
+        {
+            return false;
+        }
+
+        if (!EnchantmentYamlConfigSupport.TryReadYamlListDirectory(EnchantmentConfigPaths.OverrideColorsDirectory, out List<SyncedData.OverrideColors> overrides, out string error))
+        {
+            Utils.print($"Skipped reload for enchantment color overrides: {error}", ConsoleColor.Red);
+            return false;
+        }
+
+        SyncedData.Synced_EnchantmentColors.Value = colors;
+        SyncedData.Overrides_EnchantmentColors.Value = overrides;
+        return true;
     }
 
-    public static bool TryReloadOverrides()
+    private static bool TryReloadOverrides()
     {
         if (!EnchantmentYamlConfigSupport.TryReadYamlListDirectory(EnchantmentConfigPaths.OverrideColorsDirectory, out List<SyncedData.OverrideColors> result, out string error))
         {

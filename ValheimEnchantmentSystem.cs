@@ -1,15 +1,16 @@
 using kg.ValheimEnchantmentSystem.Misc;
 using kg.ValheimEnchantmentSystem.UI;
 using kg.ValheimEnchantmentSystem.Configs;
+using kg.ValheimEnchantmentSystem.Integrations;
+using kg.ValheimEnchantmentSystem.Items_Structures;
 using kg.ValheimEnchantmentSystem.Platform;
 using ServerSync;
 using UnityEngine.Rendering;
 
 namespace kg.ValheimEnchantmentSystem
 {
-    [BepInPlugin(GUID, PLUGIN_NAME, PLUGIN_VERSION)]
+    [BepInPlugin(GUID, PLUGIN_NAME, ModVersion)]
     [BepInDependency("org.bepinex.plugins.jewelcrafting", BepInDependency.DependencyFlags.SoftDependency)]
-    [BepInDependency("com   .bepis.bepinex.configurationmanager", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("kg.ArcaneWard", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("kg.Blueprint", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("expand_world_data", BepInDependency.DependencyFlags.SoftDependency)]
@@ -17,7 +18,7 @@ namespace kg.ValheimEnchantmentSystem
     {
         private const string GUID = "kg.ValheimEnchantmentSystem";
         private const string PLUGIN_NAME = "ValheimEnchantmentSystem";
-        private const string PLUGIN_VERSION = "1.9.8";
+        public const string ModVersion = "1.9.10";
         private const string GeneralConfigSection = "General";
         private const string ClientConfigSection = "Client";
         private static readonly string ConfigFileName = GUID + ".cfg";
@@ -30,8 +31,8 @@ namespace kg.ValheimEnchantmentSystem
         {  
             DisplayName = PLUGIN_NAME,
             ModRequired = true,
-            MinimumRequiredVersion = PLUGIN_VERSION,
-            CurrentVersion = PLUGIN_VERSION
+            MinimumRequiredVersion = ModVersion,
+            CurrentVersion = ModVersion
         };
         public static string ConfigFolder;
         private static ConfigEntry<Toggle> _serverConfigLocked = null!;
@@ -44,18 +45,6 @@ namespace kg.ValheimEnchantmentSystem
 
         public static bool NoGraphics;
 
-        private readonly struct AutoloadFailure
-        {
-            public readonly Type ModuleType;
-            public readonly string Reason;
-
-            public AutoloadFailure(Type moduleType, string reason)
-            {
-                ModuleType = moduleType;
-                Reason = reason;
-            }
-        }
-
         internal static IEnumerable<Type> GetAssemblyTypes()
         {
             try
@@ -66,127 +55,70 @@ namespace kg.ValheimEnchantmentSystem
             {
                 foreach (Exception loaderException in ex.LoaderExceptions.Where(e => e != null))
                 {
-                    Utils.print($"Autoload type scan loader exception: {loaderException}", ConsoleColor.Red);
+                    Utils.print($"Patch type scan loader exception: {loaderException}", ConsoleColor.Red);
                 }
 
                 return ex.Types.Where(type => type != null)!;
             }
         }
 
-        private static bool TryResolveAutoloadMethod(Type moduleType, VES_Autoload autoload, out MethodInfo method, out string reason)
+        private static HashSet<Type> InitializeModules()
         {
-            method = null!;
-            string methodName = string.IsNullOrWhiteSpace(autoload.InitMethod) ? "OnInit" : autoload.InitMethod;
-            MethodInfo? candidate = moduleType.GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Public);
+            HashSet<Type> failedModules = new();
 
-            if (candidate == null)
-            {
-                reason = $"method '{methodName}' not found";
-                return false;
-            }
+            TryInitializeModule(typeof(External_AsmLoad), External_AsmLoad.Initialize, failedModules);
+            TryInitializeModule(typeof(SyncedData), SyncedData.Initialize, failedModules);
+            TryInitializeModule(typeof(Enchantment_Skill), Enchantment_Skill.Initialize, failedModules);
+            TryInitializeModule(typeof(ScrollDropService), ScrollDropService.BindConfiguration, failedModules);
+            TryInitializeModule(typeof(IntegrationRegistry), IntegrationRegistry.Initialize, failedModules, typeof(SyncedData));
+            TryInitializeModule(typeof(BiomeTierResolver), BiomeTierResolver.Initialize, failedModules, typeof(IntegrationRegistry));
+            TryInitializeModule(typeof(ResourceMapRequirementResolver), ResourceMapRequirementResolver.Initialize, failedModules,
+                typeof(SyncedData), typeof(BiomeTierResolver));
+            TryInitializeModule(typeof(ScrollDropService), ScrollDropService.Initialize, failedModules, typeof(BiomeTierResolver));
+            TryInitializeModule(typeof(SkillScrollService), SkillScrollService.Initialize, failedModules, typeof(Enchantment_Skill));
+            TryInitializeModule(typeof(EquippedEnchantmentSnapshotService), EquippedEnchantmentSnapshotService.Initialize, failedModules, typeof(SyncedData));
+            TryInitializeModule(typeof(VfxInstanceRegistry), VfxInstanceRegistry.Initialize, failedModules);
+            TryInitializeModule(typeof(Notifications_UI), Notifications_UI.Initialize, failedModules, typeof(SyncedData));
+            TryInitializeModule(typeof(Enchantment_VFX), Enchantment_VFX.Initialize, failedModules, typeof(SyncedData));
+            TryInitializeModule(typeof(VES_UI), VES_UI.Initialize, failedModules, typeof(SyncedData));
+            TryInitializeModule(typeof(Info_UI), Info_UI.Initialize, failedModules, typeof(SyncedData), typeof(VES_UI));
+            TryInitializeModule(typeof(InventoryOverlayVfx), InventoryOverlayVfx.Initialize, failedModules, typeof(SyncedData));
+            TryInitializeModule(typeof(Enchantment_Core), Enchantment_Core.Initialize, failedModules,
+                typeof(SyncedData), typeof(Enchantment_Skill), typeof(Notifications_UI), typeof(Enchantment_VFX));
+            TryInitializeModule(typeof(ScrollItems), ScrollItems.Initialize, failedModules,
+                typeof(VES_UI), typeof(Enchantment_Skill), typeof(SkillScrollService));
 
-            if (!candidate.IsStatic)
-            {
-                reason = $"method '{methodName}' must be static";
-                return false;
-            }
-
-            if (candidate.GetParameters().Length != 0)
-            {
-                reason = $"method '{methodName}' must not have parameters";
-                return false;
-            }
-
-            if (candidate.ReturnType != typeof(void))
-            {
-                reason = $"method '{methodName}' must return void";
-                return false;
-            }
-
-            method = candidate;
-            reason = string.Empty;
-            return true;
+            return failedModules;
         }
 
-        private static HashSet<Type> RunAutoload()
+        private static void TryInitializeModule(Type moduleType, Action initializer, ISet<Type> failedModules, params Type[] dependencies)
         {
-            List<KeyValuePair<VES_Autoload, Type>> toAutoload = GetAssemblyTypes()
-                .Where(t => t.GetCustomAttribute<VES_Autoload>() != null)
-                .Select(x => new KeyValuePair<VES_Autoload, Type>(x.GetCustomAttribute<VES_Autoload>(), x))
-                .OrderBy(x => x.Key.priority)
-                .ThenBy(x => x.Value.FullName, StringComparer.Ordinal)
-                .ToList();
-            HashSet<Type> knownAutoloadModules = toAutoload
-                .Select(entry => GetTopLevelDeclaringType(entry.Value))
-                .ToHashSet();
-
-            HashSet<Type> failedAutoloadTypes = new();
-            List<AutoloadFailure> failures = new();
-            int successCount = 0;
-
-            foreach (KeyValuePair<VES_Autoload, Type> autoload in toAutoload)
+            Type moduleRoot = GetTopLevelDeclaringType(moduleType);
+            if (failedModules.Contains(moduleRoot))
             {
-                Type moduleType = autoload.Value;
-                Type moduleRoot = GetTopLevelDeclaringType(moduleType);
-
-                Type[] dependencyRoots = (autoload.Key.DependsOn ?? Array.Empty<Type>())
-                    .Select(GetTopLevelDeclaringType)
-                    .Distinct()
-                    .ToArray();
-
-                Type[] missingDependencies = dependencyRoots
-                    .Where(dependency => !knownAutoloadModules.Contains(dependency))
-                    .ToArray();
-                if (missingDependencies.Length > 0)
-                {
-                    string dependencyError = $"unknown dependency: {string.Join(", ", missingDependencies.Select(type => type.FullName ?? type.Name))}";
-                    failedAutoloadTypes.Add(moduleRoot);
-                    failures.Add(new AutoloadFailure(moduleType, dependencyError));
-                    Utils.print($"Autoload dependency validation failed for {moduleType.FullName}: {dependencyError}", ConsoleColor.Red);
-                    continue;
-                }
-
-                Type[] failedDependencies = dependencyRoots
-                    .Where(failedAutoloadTypes.Contains)
-                    .ToArray();
-                if (failedDependencies.Length > 0)
-                {
-                    string dependencyError = $"dependency failed: {string.Join(", ", failedDependencies.Select(type => type.FullName ?? type.Name))}";
-                    failedAutoloadTypes.Add(moduleRoot);
-                    failures.Add(new AutoloadFailure(moduleType, dependencyError));
-                    Utils.print($"Autoload skipped {moduleType.FullName}: {dependencyError}", ConsoleColor.Yellow);
-                    continue;
-                }
-
-                if (!TryResolveAutoloadMethod(moduleType, autoload.Key, out MethodInfo method, out string reason))
-                {
-                    failedAutoloadTypes.Add(moduleRoot);
-                    failures.Add(new AutoloadFailure(moduleType, reason));
-                    Utils.print($"Autoload validation failed for {moduleType.FullName}: {reason}", ConsoleColor.Red);
-                    continue;
-                }
-
-                try
-                {
-                    method.Invoke(null, null);
-                    successCount++;
-                }
-                catch (Exception ex)
-                {
-                    Exception root = ex is TargetInvocationException { InnerException: not null } tie ? tie.InnerException : ex;
-                    failedAutoloadTypes.Add(moduleRoot);
-                    failures.Add(new AutoloadFailure(moduleType, root.Message));
-                    Utils.print($"Autoload exception on method {method}. Class {moduleType}\n:{root}", ConsoleColor.Red);
-                }
+                return;
             }
 
-            if (failures.Count > 0)
+            Type[] failedDependencies = dependencies
+                .Select(GetTopLevelDeclaringType)
+                .Where(failedModules.Contains)
+                .ToArray();
+            if (failedDependencies.Length > 0)
             {
-                string failedModules = string.Join(", ", failures.Select(failure => $"{failure.ModuleType.Name} ({failure.Reason})"));
-                Utils.print($"Autoload completed with failures. success={successCount}, failed={failures.Count}. Failed modules: {failedModules}", ConsoleColor.Yellow);
+                failedModules.Add(moduleRoot);
+                Utils.print($"Initialization skipped {moduleType.FullName}: dependency failed: {string.Join(", ", failedDependencies.Select(type => type.FullName ?? type.Name))}", ConsoleColor.Yellow);
+                return;
             }
 
-            return failedAutoloadTypes;
+            try
+            {
+                initializer();
+            }
+            catch (Exception ex)
+            {
+                failedModules.Add(moduleRoot);
+                Utils.print($"Initialization failed for {moduleType.FullName}: {ex}", ConsoleColor.Red);
+            }
         }
 
         internal static Type GetTopLevelDeclaringType(Type type)
@@ -221,7 +153,7 @@ namespace kg.ValheimEnchantmentSystem
                 InitializeConfigInfrastructure();
                 InitializeAssets();
 
-                HashSet<Type> failedAutoloadTypes = RunAutoload();
+                HashSet<Type> failedAutoloadTypes = InitializeModules();
                 ApplyRegisteredPatches(failedAutoloadTypes);
                 InitializeConfigReloadInfrastructure();
             }
@@ -238,10 +170,6 @@ namespace kg.ValheimEnchantmentSystem
             VES_UI.Update();
             Info_UI.Update();
             Notifications_UI.Update();
-        }
-
-        private void Start()
-        {
         }
 
         private void OnDestroy()
@@ -293,7 +221,15 @@ namespace kg.ValheimEnchantmentSystem
                 Directory.CreateDirectory(ConfigFolder);
             }
 
-            _serverConfigLocked = config(GeneralConfigSection, "Lock Configuration", Toggle.On, "If on, synced configuration can be changed by server admins only.");
+            _serverConfigLocked = config(
+                GeneralConfigSection,
+                "Lock Configuration",
+                Toggle.On,
+                ConfigurationManagerDisplay.Description(
+                    "If on, synced configuration can be changed by server admins only.",
+                    ConfigurationManagerDisplay.General,
+                    1000,
+                    "Lock Configuration"));
             _ = ConfigSync.AddLockingConfigEntry(_serverConfigLocked);
         }
 

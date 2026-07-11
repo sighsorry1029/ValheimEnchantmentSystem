@@ -23,13 +23,23 @@ internal static class EnchantmentYamlConfigSupport
 
     public static bool TryReloadYamlConfig<T>(string path, CustomSyncedValue<T> target, string label)
     {
-        if (!path.TryFromYAML(out T result, out string error))
+        if (!TryReadYamlConfig(path, label, out T result))
+        {
+            return false;
+        }
+
+        target.Value = result;
+        return true;
+    }
+
+    public static bool TryReadYamlConfig<T>(string path, string label, out T result)
+    {
+        if (!path.TryFromYAML(out result, out string error))
         {
             Utils.print($"Skipped reload for {label} ({path}): {error}", ConsoleColor.Red);
             return false;
         }
 
-        target.Value = result;
         return true;
     }
 

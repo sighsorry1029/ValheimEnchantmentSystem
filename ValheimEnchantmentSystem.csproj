@@ -55,15 +55,14 @@
                           %TEMP%\**\*.cs;
                           .tmp\**\*.cs;
                           _tmp_allmanagers_template\**\*.cs;
-                          Managers\AnimationSpeedManager.cs;
-                          Managers\ItemManager.cs;
-                          Managers\PieceManager.cs;
-                          Managers\LocalizationExternalReinject.Disabled.cs;
-                          Platform\ThinSkillManager.cs" />
+                          Tests\**\*.cs" />
     </ItemGroup>
     <ItemGroup>
       <None Include="App.config" />
       <None Include="packages.config" />
+      <None Include="README.md" />
+      <None Include="CHANGELOG.md" />
+      <None Include="scripts\Package-Release.ps1" />
     </ItemGroup>
     <ItemGroup>
       <EmbeddedResource Include="Resources\kg_enchantment" />
@@ -102,9 +101,8 @@
       <EmbeddedResource Include="icons\enchantment.png" />
       <Content Include="ILRepack.targets" />
       <EmbeddedResource Include="Resources\VES_Scripts.dll" />
-      <Content Include="ThunderstorePackage\icon.png" />
-      <Content Include="ThunderstorePackage\manifest.json" />
-      <Content Include="ThunderstorePackage\README.md" />
+      <Content Include="Thunderstore\icon.png" />
+      <Content Include="Thunderstore\manifest.json" />
       <EmbeddedResource Include="translations\kg.ValheimEnchantmentSystem.English.yml">
         <LogicalName>translations.English.yml</LogicalName>
       </EmbeddedResource>
@@ -209,7 +207,7 @@
     </ItemGroup>
     <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets"/>
 
-    <Target Name="Copy" AfterTargets="ILRepack">
+    <Target Name="PostBuildArtifacts" AfterTargets="ILRepacker">
         <!-- Auto-copy to game folders disabled - copy manually when needed -->
         <!-- <Exec Command="copy /Y &quot;$(TargetDir)$(AssemblyName).dll&quot; &quot;C:\Program Files (x86)\Steam\steamapps\common\Valheim\BepInEx\plugins\$(AssemblyName).dll&quot;" /> -->
         <!-- <Exec Command="copy /Y &quot;$(TargetDir)$(AssemblyName).dll&quot; &quot;C:\Program Files (x86)\Steam\steamapps\common\Valheim Dedicated Server\BepInEx\plugins\$(AssemblyName).dll&quot;" /> -->
@@ -217,8 +215,8 @@
         <!-- <Exec Command="copy /Y &quot;$(TargetDir)$(AssemblyName).dll.mdb&quot; &quot;C:\Program Files (x86)\Steam\steamapps\common\Valheim\BepInEx\plugins\$(AssemblyName).dll.mdb&quot;" /> -->
         <!-- <Exec Command="copy /Y &quot;$(TargetDir)$(AssemblyName).dll.mdb&quot; &quot;C:\Program Files (x86)\Steam\steamapps\common\Valheim Dedicated Server\BepInEx\plugins\$(AssemblyName).dll.mdb&quot;" /> -->
 
-        <Exec Command="copy /Y &quot;$(TargetDir)$(AssemblyName).dll&quot; &quot;$(ProjectDir)ThunderstorePackage\$(AssemblyName).dll&quot;" IgnoreExitCode="true" />
-        <Exec Command="copy /Y &quot;$(TargetDir)$(AssemblyName).dll.mdb&quot; &quot;$(ProjectDir)ThunderstorePackage\$(AssemblyName).dll.mdb&quot;" IgnoreExitCode="true" />
+        <Exec Condition="'$(Configuration)' == 'Release'"
+              Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\scripts\Package-Release.ps1&quot; -ProjectDir &quot;$(MSBuildProjectDirectory)&quot; -DllPath &quot;$(TargetPath)&quot; -IntermediateDirectory &quot;$(IntermediateOutputPath)Package&quot;" />
     </Target>
     
     <Target Name="CopyToDedicatedServer">

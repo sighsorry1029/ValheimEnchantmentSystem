@@ -4,7 +4,6 @@ using kg.ValheimEnchantmentSystem.Misc;
 
 namespace kg.ValheimEnchantmentSystem.Integrations;
 
-[VES_Autoload(VES_Autoload.Priority.Normal, "OnInit", typeof(SyncedData))]
 public static class IntegrationRegistry
 {
     private static readonly IOptionalIntegration[] Integrations =
@@ -14,16 +13,13 @@ public static class IntegrationRegistry
         ExpandWorldDataIntegration.Instance
     };
 
-    private static readonly List<IEnchantCompatibilityRule> CompatibilityRules = new();
-    private static readonly List<IEnchantmentStateIntegration> StateIntegrations = new();
     private static readonly List<IInventoryGridCompatibility> InventoryGridCompatibilities = new();
     private static readonly List<IBiomeCatalogSource> BiomeCatalogSources = new();
     private static bool _initialized;
 
     public static event Action? BiomesChanged;
 
-    [UsedImplicitly]
-    private static void OnInit()
+    internal static void Initialize()
     {
         if (_initialized)
         {
@@ -36,16 +32,6 @@ public static class IntegrationRegistry
             if (!integration.IsAvailable())
             {
                 continue;
-            }
-
-            if (integration is IEnchantCompatibilityRule compatibilityRule)
-            {
-                CompatibilityRules.Add(compatibilityRule);
-            }
-
-            if (integration is IEnchantmentStateIntegration stateIntegration)
-            {
-                StateIntegrations.Add(stateIntegration);
             }
 
             if (integration is IInventoryGridCompatibility inventoryGridCompatibility)
@@ -65,32 +51,16 @@ public static class IntegrationRegistry
 
     public static bool CanEnchant(ItemDrop.ItemData item, out string message)
     {
-        foreach (IEnchantCompatibilityRule compatibilityRule in CompatibilityRules)
-        {
-            if (!compatibilityRule.CanEnchant(item, out message))
-            {
-                return false;
-            }
-        }
-
         message = string.Empty;
         return true;
     }
 
     public static void ApplyEnchantState(Enchantment_Core.Enchanted enchantment)
     {
-        foreach (IEnchantmentStateIntegration integration in StateIntegrations)
-        {
-            integration.Apply(enchantment);
-        }
     }
 
     public static void ApplyEnchantUpgradedState(Enchantment_Core.Enchanted enchantment)
     {
-        foreach (IEnchantmentStateIntegration integration in StateIntegrations)
-        {
-            integration.ApplyUpgraded(enchantment);
-        }
     }
 
     public static int GetReservedTopRows()

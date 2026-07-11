@@ -161,7 +161,8 @@ public static class Defaults
             "CrossbowRipperNature",
             "StaffClusterbomb",
             "StaffGreenRoots",
-            "StaffLightning"
+            "StaffLightning",
+            "StaffRedTroll"
         },
         ["(A)Armor"] = new()
         {
@@ -193,6 +194,7 @@ public static class Defaults
             "CrossbowArbalest",
             "StaffFireball",
             "StaffIceShards",
+            "StaffSkeleton",
             "PickaxeBlackMetal"
         },
         ["(B)Armor"] = new()

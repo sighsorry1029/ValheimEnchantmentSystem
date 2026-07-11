@@ -10,6 +10,7 @@ Jewelcrafting.sln.DotSettings.user
 .vs
 Directory.Build.targets
 /GithubReadme/
+/artifacts/
 _tmp_*/
 _tmp_*
 %TEMP%/
