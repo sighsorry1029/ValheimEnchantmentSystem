@@ -5,7 +5,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ValheimEnchantmentSystem.Ru
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{7F846179-5F18-4E1C-A24B-E1388F5BF195}"
 	ProjectSection(SolutionItems) = preProject
-		CHANGELOG.md = CHANGELOG.md
+		Thunderstore\CHANGELOG.md = Thunderstore\CHANGELOG.md
 		README.md = README.md
 	EndProjectSection
 EndProject

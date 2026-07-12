@@ -48,7 +48,7 @@ $thunderstoreSource = Join-Path $repoRoot "Thunderstore"
 $manifestPath = Join-Path $thunderstoreSource "manifest.json"
 $iconPath = Join-Path $thunderstoreSource "icon.png"
 $readmePath = Join-Path $repoRoot "README.md"
-$changelogPath = Join-Path $repoRoot "CHANGELOG.md"
+$changelogPath = Join-Path $thunderstoreSource "CHANGELOG.md"
 $englishLocalizationPath = Join-Path $repoRoot "translations\kg.ValheimEnchantmentSystem.English.yml"
 
 foreach ($requiredFile in @($dll, $manifestPath, $iconPath, $readmePath, $changelogPath, $englishLocalizationPath)) {
@@ -105,9 +105,10 @@ if ($actualNexusFiles.Count -ne 1 -or $actualNexusFiles[0] -ne $dllName) {
     throw "Nexus staging must contain only $dllName."
 }
 
-$thunderstoreZip = Join-Path $artifactsDirectory "$packageName-$packageVersion-Thunderstore.zip"
+$thunderstoreZip = Join-Path $thunderstoreSource "$packageName-$packageVersion-Thunderstore.zip"
 $nexusZip = Join-Path $artifactsDirectory "$packageName-$packageVersion-Nexus.zip"
-foreach ($zip in @($thunderstoreZip, $nexusZip)) {
+$legacyThunderstoreZip = Join-Path $artifactsDirectory "$packageName-$packageVersion-Thunderstore.zip"
+foreach ($zip in @($thunderstoreZip, $nexusZip, $legacyThunderstoreZip)) {
     if (Test-Path -LiteralPath $zip) {
         Remove-Item -LiteralPath $zip -Force
     }

@@ -11,6 +11,7 @@ Jewelcrafting.sln.DotSettings.user
 Directory.Build.targets
 /GithubReadme/
 /artifacts/
+/Thunderstore/*-Thunderstore.zip
 _tmp_*/
 _tmp_*
 %TEMP%/

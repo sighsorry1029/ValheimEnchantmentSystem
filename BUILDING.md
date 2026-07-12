@@ -58,7 +58,7 @@ dotnet build ValheimEnchantmentSystem.csproj
 dotnet build ValheimEnchantmentSystem.csproj -c Release
 ```
 
-A Release build creates versioned Thunderstore and Nexus archives in `artifacts/`.
+A Release build creates the versioned Thunderstore archive in `Thunderstore/` and the Nexus archive in `artifacts/`.
 
 Run the deterministic enchantment rule checks after changing chance, skill bonus, or failure behavior:
 
@@ -71,7 +71,7 @@ dotnet run --project .\Tests\ValheimEnchantmentSystem.RuleTests.csproj -c Releas
 Update all release version fields before building a new package:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Set-Version.ps1 -Version 1.9.9
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Set-Version.ps1 -Version 1.9.11
 dotnet build ValheimEnchantmentSystem.csproj -c Release
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Set-Version.ps1 -Check
 ```
@@ -82,4 +82,4 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Set-Version.ps1 -C
 
 - The project fails early with a clear error if Valheim publicized assemblies are missing.
 - The project fails early if `ServerSync.dll` or `YamlDotNet.dll` cannot be resolved.
-- The Thunderstore archive contains the DLL, root README, root changelog, manifest, and icon. The Nexus archive contains only the DLL.
+- The Thunderstore archive contains the DLL, root README, `Thunderstore/CHANGELOG.md`, manifest, icon, and English localization. The Nexus archive contains only the DLL.

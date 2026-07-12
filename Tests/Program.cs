@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using BepInEx.Configuration;
 using kg.ValheimEnchantmentSystem;
 using kg.ValheimEnchantmentSystem.Configs;
+using kg.ValheimEnchantmentSystem.Items_Structures;
 
 namespace ValheimEnchantmentSystem.RuleTests;
 
@@ -19,6 +20,7 @@ internal static class Program
         TestConfigurationManagerDisplayMetadata();
         TestWebhookListConfig();
         TestResourceMapTierSelection();
+        TestSkillScrollPrefabNames();
 
         if (_failures == 0)
         {
@@ -227,6 +229,27 @@ resourceMap:
                 out _,
                 out _),
             "missing resourceMap root is rejected");
+    }
+
+    private static void TestSkillScrollPrefabNames()
+    {
+        foreach (char tier in "FEDCBAS")
+        {
+            True(SkillScrollService.TryGetSkillScrollTier($"kg_EnchantSkillScroll_{tier}", out char parsedTier),
+                $"canonical tier {tier} skill scroll name is accepted");
+            Equal(tier, parsedTier, $"canonical tier {tier} skill scroll name returns its tier");
+        }
+
+        False(SkillScrollService.TryGetSkillScrollTier("kg_EnchantSkillScroll_", out _),
+            "skill scroll name without a tier is rejected");
+        False(SkillScrollService.TryGetSkillScrollTier("kg_EnchantSkillScroll_fake_S", out _),
+            "skill scroll name with an extra suffix is rejected");
+        False(SkillScrollService.TryGetSkillScrollTier("kg_EnchantSkillScroll_X", out _),
+            "skill scroll name with an invalid tier is rejected");
+        False(SkillScrollService.TryGetSkillScrollTier("kg_EnchantSkillScroll_s", out _),
+            "skill scroll name with a lowercase tier is rejected");
+        False(SkillScrollService.TryGetSkillScrollTier("kg_EnchantScroll_Weapon_S", out _),
+            "non-skill scroll name is rejected");
     }
 
     private static char? ResolveDefaultResourceBiomeTier(string biome)

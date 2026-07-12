@@ -12,6 +12,7 @@ public static class SkillScrollService
     private const string RoutedRequestConsume = "VES_RequestConsumeExpScroll_Server";
     private const string RoutedGrantConsume = "VES_GrantConsumeExpScroll_Client";
     private const string SkillScrollConsumedZdoKey = "VES_Consumed";
+    private const string ValidSkillScrollTiers = "FEDCBAS";
     private const float MaxConsumeDistance = 6f;
     private static readonly Dictionary<char, ConfigEntry<int>> BookXpByTier = new();
     private static readonly List<GameObject> SkillScrollPrefabs = new();
@@ -59,7 +60,7 @@ public static class SkillScrollService
         {
             return false;
         }
-        if (!EnchantmentTierCatalog.TryGetTierFromPrefabName(prefabName, out char tier))
+        if (!TryGetSkillScrollTier(prefabName, out char tier))
         {
             return false;
         }
@@ -77,9 +78,18 @@ public static class SkillScrollService
         return true;
     }
 
-    private static bool IsSkillScrollPrefabName(string? prefabName)
+    internal static bool TryGetSkillScrollTier(string? prefabName, out char tier)
     {
-        return !string.IsNullOrWhiteSpace(prefabName) && prefabName.StartsWith(SkillScrollPrefabPrefix, StringComparison.Ordinal);
+        tier = default;
+        if (string.IsNullOrEmpty(prefabName) ||
+            prefabName.Length != SkillScrollPrefabPrefix.Length + 1 ||
+            !prefabName.StartsWith(SkillScrollPrefabPrefix, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        tier = prefabName[SkillScrollPrefabPrefix.Length];
+        return ValidSkillScrollTiers.IndexOf(tier) >= 0;
     }
 
     private static bool TryGetCurrentZdoIdText(ZNetView znv, out string zdoIdText)
@@ -153,7 +163,7 @@ public static class SkillScrollService
             return false;
         }
 
-        if (!IsSkillScrollPrefabName(prefab.name))
+        if (!TryGetSkillScrollTier(prefab.name, out _) || prefab.GetComponent<ExpScroll>() == null)
         {
             return false;
         }
@@ -205,17 +215,12 @@ public static class SkillScrollService
 
     private static bool CanSenderConsumeScroll(long sender, ZDO scrollZdo)
     {
-        if (scrollZdo == null || ZRoutedRpc.instance == null || ZDOMan.instance == null || ZNetScene.instance == null)
+        if (scrollZdo == null || ZRoutedRpc.instance == null || ZDOMan.instance == null)
         {
             return false;
         }
 
-        GameObject liveScroll = ZNetScene.instance.FindInstance(scrollZdo.m_uid);
-        if (liveScroll == null || liveScroll.GetComponent<ExpScroll>() == null)
-        {
-            return false;
-        }
-
+        // Dedicated servers may know the scroll ZDO without loading its live GameObject near a remote player.
         if (!TryGetSenderPosition(sender, out Vector3 senderPosition))
         {
             return false;

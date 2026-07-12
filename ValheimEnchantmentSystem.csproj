@@ -61,7 +61,7 @@
       <None Include="App.config" />
       <None Include="packages.config" />
       <None Include="README.md" />
-      <None Include="CHANGELOG.md" />
+      <None Include="Thunderstore\CHANGELOG.md" />
       <None Include="scripts\Package-Release.ps1" />
     </ItemGroup>
     <ItemGroup>
