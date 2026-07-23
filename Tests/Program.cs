@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using BepInEx.Configuration;
 using kg.ValheimEnchantmentSystem;
 using kg.ValheimEnchantmentSystem.Configs;
+using kg.ValheimEnchantmentSystem.Integrations;
 using kg.ValheimEnchantmentSystem.Items_Structures;
 
 namespace ValheimEnchantmentSystem.RuleTests;
@@ -21,6 +22,7 @@ internal static class Program
         TestWebhookListConfig();
         TestResourceMapTierSelection();
         TestSkillScrollPrefabNames();
+        TestExpandWorldDataReloadMethodSelection();
 
         if (_failures == 0)
         {
@@ -250,6 +252,46 @@ resourceMap:
             "skill scroll name with a lowercase tier is rejected");
         False(SkillScrollService.TryGetSkillScrollTier("kg_EnchantScroll_Weapon_S", out _),
             "non-skill scroll name is rejected");
+    }
+
+    private static void TestExpandWorldDataReloadMethodSelection()
+    {
+        AssertMethodSignatures(
+            typeof(CurrentExpandWorldBiomeManager),
+            new[] { "NamesFromFile:0:closed", "ReadConfigs:0:closed", "FromSetting:1:closed", "SetNames:1:closed" },
+            "current Expand World Data reload hooks");
+        AssertMethodSignatures(
+            typeof(UnsupportedExpandWorldBiomeManager),
+            Array.Empty<string>(),
+            "unsupported Expand World Data reload hooks");
+    }
+
+    private static void AssertMethodSignatures(Type managerType, IReadOnlyList<string> expectedSignatures, string name)
+    {
+        List<string> actualSignatures = new();
+        foreach (var method in ExpandWorldDataIntegration.FindBiomeReloadTargetMethods(managerType))
+        {
+            actualSignatures.Add($"{method.Name}:{method.GetParameters().Length}:{(method.ContainsGenericParameters ? "generic" : "closed")}");
+        }
+
+        Equal(string.Join(",", expectedSignatures), string.Join(",", actualSignatures), name);
+    }
+
+    private sealed class CurrentExpandWorldBiomeManager
+    {
+        public static void NamesFromFile() { }
+        private static void ReadConfigs() { }
+        private static void ReadConfigs(string yaml) { }
+        internal static void FromSetting(string yaml) { }
+        internal static void FromSetting<T>(T yaml) { }
+        public static void SetNames(object names) { }
+        public static int SetNames() => 0;
+        public static void Unrelated() { }
+    }
+
+    private sealed class UnsupportedExpandWorldBiomeManager
+    {
+        public static void Unrelated() { }
     }
 
     private static char? ResolveDefaultResourceBiomeTier(string biome)

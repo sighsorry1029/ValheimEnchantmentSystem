@@ -13,7 +13,7 @@ public sealed class ExpandWorldDataIntegration : IOptionalIntegration, IBiomeCat
     private const string ExpandWorldDataGuid = "expand_world_data";
     private const string ExpandWorldBiomeManagerTypeName = "ExpandWorldData.BiomeManager";
     private const string ExpandWorldBiomeToDisplayNameFieldName = "BiomeToDisplayName";
-    private static readonly string[] ExpandWorldBiomeReloadMethodNames = { "NamesFromFile", "FromFile", "FromSetting", "SetNames" };
+    private IReadOnlyList<MethodBase>? _biomeReloadTargetMethods;
 
     public string Name => "ExpandWorldData";
 
@@ -118,12 +118,16 @@ public sealed class ExpandWorldDataIntegration : IOptionalIntegration, IBiomeCat
         return identifier.Length > 0;
     }
 
-    private List<MethodBase> GetBiomeReloadTargetMethods(bool logMissingHooks)
+    private IReadOnlyList<MethodBase> GetBiomeReloadTargetMethods(bool logMissingHooks)
     {
-        List<MethodBase> methods = new();
+        if (_biomeReloadTargetMethods is { } cachedMethods)
+        {
+            return cachedMethods;
+        }
+
         if (!IsAvailable())
         {
-            return methods;
+            return Array.Empty<MethodBase>();
         }
 
         Type biomeManagerType = AccessTools.TypeByName(ExpandWorldBiomeManagerTypeName);
@@ -134,16 +138,10 @@ public sealed class ExpandWorldDataIntegration : IOptionalIntegration, IBiomeCat
                 Utils.print("ExpandWorldData biome manager type was not found while preparing biome reload hooks.", ConsoleColor.Yellow);
             }
 
-            return methods;
+            return Array.Empty<MethodBase>();
         }
 
-        foreach (string methodName in ExpandWorldBiomeReloadMethodNames)
-        {
-            if (AccessTools.Method(biomeManagerType, methodName) is { } method && !methods.Contains(method))
-            {
-                methods.Add(method);
-            }
-        }
+        IReadOnlyList<MethodBase> methods = _biomeReloadTargetMethods = FindBiomeReloadTargetMethods(biomeManagerType);
 
         if (methods.Count == 0 && logMissingHooks)
         {
@@ -151,6 +149,54 @@ public sealed class ExpandWorldDataIntegration : IOptionalIntegration, IBiomeCat
         }
 
         return methods;
+    }
+
+    internal static IReadOnlyList<MethodBase> FindBiomeReloadTargetMethods(Type biomeManagerType)
+    {
+        MethodInfo[] declaredMethods = biomeManagerType.GetMethods(
+            BindingFlags.Public |
+            BindingFlags.NonPublic |
+            BindingFlags.Static |
+            BindingFlags.DeclaredOnly);
+        List<MethodBase> methods = new();
+
+        AddMethodIfFound(methods, FindVoidMethod(declaredMethods, "NamesFromFile", 0));
+        AddMethodIfFound(methods, FindVoidMethod(declaredMethods, "ReadConfigs", 0));
+        AddMethodIfFound(methods, FindVoidMethod(declaredMethods, "FromSetting", 1, typeof(string)));
+        AddMethodIfFound(methods, FindVoidMethod(declaredMethods, "SetNames", 1));
+
+        return methods.ToArray();
+    }
+
+    private static MethodInfo? FindVoidMethod(MethodInfo[] methods, string name, int parameterCount, Type? firstParameterType = null)
+    {
+        foreach (MethodInfo method in methods)
+        {
+            if (!string.Equals(method.Name, name, StringComparison.Ordinal) ||
+                method.ReturnType != typeof(void) ||
+                method.ContainsGenericParameters)
+            {
+                continue;
+            }
+
+            ParameterInfo[] parameters = method.GetParameters();
+            if (parameters.Length != parameterCount)
+                continue;
+            if (firstParameterType != null && parameters[0].ParameterType != firstParameterType)
+                continue;
+
+            return method;
+        }
+
+        return null;
+    }
+
+    private static void AddMethodIfFound(ICollection<MethodBase> methods, MethodInfo? method)
+    {
+        if (method != null && !methods.Contains(method))
+        {
+            methods.Add(method);
+        }
     }
 
     [HarmonyPatch]

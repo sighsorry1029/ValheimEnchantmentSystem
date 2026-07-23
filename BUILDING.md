@@ -71,7 +71,7 @@ dotnet run --project .\Tests\ValheimEnchantmentSystem.RuleTests.csproj -c Releas
 Update all release version fields before building a new package:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Set-Version.ps1 -Version 1.9.11
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Set-Version.ps1 -Version 1.9.12
 dotnet build ValheimEnchantmentSystem.csproj -c Release
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Set-Version.ps1 -Check
 ```
