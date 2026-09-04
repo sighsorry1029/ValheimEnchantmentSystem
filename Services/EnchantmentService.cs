@@ -93,24 +93,38 @@ public static class EnchantmentService
             return result;
         }
 
-        if (!TryResolveRequirement(item, result.ItemPrefabName, useBlessedScroll, out SyncedData.EnchantmentReqs reqs, out GameObject requirementPrefab))
+        if (!TryResolveRequirement(item, result.ItemPrefabName, useBlessedScroll, out GameObject requirementPrefab))
         {
             result.Message = "$enchantment_nomaterials".Localize();
             return result;
         }
 
-        if (!TryConsumeRequirement(requirementPrefab.name))
+        if (!EnchantmentMaterialService.TryConsumeOne(player, requirementPrefab.name))
         {
             result.Message = "$enchantment_nomaterials".Localize();
             return result;
         }
 
         result.ConsumedRequirement = true;
-        float successfulAttemptSkillExp = GetSkillExp(reqs);
+        EnchantmentRulePreview rulePreview = EnchantmentRules.BuildPreview(
+            item,
+            result.ItemPrefabName,
+            result.PreviousLevel,
+            player,
+            useBlessedScroll,
+            blessedScrollPreventsBreak);
+        float successfulAttemptSkillExp = EnchantmentSkillExperience.CalculateSuccessfulAttemptExp(
+            result.PreviousLevel,
+            rulePreview.BaseChance,
+            rulePreview.FinalChance,
+            SyncedData.EnchantSkillExpBase.Value,
+            SyncedData.EnchantSkillExpPerLevel.Value,
+            SyncedData.EnchantSkillExpDifficultyBonus.Value);
 
-        EnchantmentDecision decision = EnchantmentRules.Decide(enchantment, player, useBlessedScroll, blessedScrollPreventsBreak);
+        EnchantmentDecision decision = EnchantmentRules.Decide(rulePreview, result.PreviousLevel);
         ApplyDecision(enchantment, player, decision, result);
-        result.SkillExpGranted = GetGrantedSkillExp(successfulAttemptSkillExp, result.Success);
+        result.SkillExpGranted = EnchantmentSkillExperience.CalculateGrantedExp(
+            successfulAttemptSkillExp, result.Success, SyncedData.FailedEnchantSkillExpMultiplier.Value);
         result.Message = BuildMessage(decision.Outcome, item.m_shared.m_name.Localize(), result.PreviousLevel, result.CurrentLevel);
         return result;
     }
@@ -128,9 +142,8 @@ public static class EnchantmentService
         };
     }
 
-    private static bool TryResolveRequirement(ItemDrop.ItemData item, string itemPrefabName, bool useBlessedScroll, out SyncedData.EnchantmentReqs reqs, out GameObject requirementPrefab)
+    private static bool TryResolveRequirement(ItemDrop.ItemData item, string itemPrefabName, bool useBlessedScroll, out GameObject requirementPrefab)
     {
-        reqs = null!;
         requirementPrefab = null!;
 
         if (item == null || string.IsNullOrWhiteSpace(itemPrefabName))
@@ -138,7 +151,7 @@ public static class EnchantmentService
             return false;
         }
 
-        reqs = SyncedData.GetReqs(itemPrefabName);
+        SyncedData.EnchantmentReqs reqs = SyncedData.GetReqs(itemPrefabName);
         if (reqs == null)
         {
             return false;
@@ -152,48 +165,6 @@ public static class EnchantmentService
 
         requirementPrefab = ZNetScene.instance?.GetPrefab(selectedRequirement.prefab);
         return requirementPrefab != null;
-    }
-
-    private static bool TryConsumeRequirement(string requirementPrefabName)
-    {
-        if (string.IsNullOrWhiteSpace(requirementPrefabName))
-        {
-            return false;
-        }
-
-        if (Utils.CustomCountItemsNoLevel(requirementPrefabName) < 1)
-        {
-            return false;
-        }
-
-        Utils.CustomRemoveItemsNoLevel(requirementPrefabName, 1);
-        return true;
-    }
-
-    private static float GetSkillExp(SyncedData.EnchantmentReqs reqs)
-    {
-        if (reqs?.enchant_prefab == null || !reqs.enchant_prefab.IsValid())
-        {
-            return 0;
-        }
-
-        return EnchantmentTierCatalog.GetEnchantSkillExp(reqs.enchant_prefab.prefab);
-    }
-
-    private static float GetGrantedSkillExp(float successfulAttemptSkillExp, bool success)
-    {
-        if (successfulAttemptSkillExp <= 0f)
-        {
-            return 0f;
-        }
-
-        if (success)
-        {
-            return successfulAttemptSkillExp;
-        }
-
-        float multiplier = Mathf.Clamp(SyncedData.FailedEnchantSkillExpMultiplier.Value, 0f, 2f);
-        return successfulAttemptSkillExp * multiplier;
     }
 
     private static void ApplyDecision(Enchantment_Core.Enchanted enchantment, Player player, EnchantmentDecision decision, EnchantmentResult result)
@@ -255,16 +226,8 @@ internal static class EnchantmentRules
         return new EnchantmentRulePreview(baseChance, skillBonus, blessBonus, finalChance, destroyChance, canBreak, blessPreventsBreak, failureType);
     }
 
-    public static EnchantmentDecision Decide(Enchantment_Core.Enchanted enchantment, Player player, bool useBlessedScroll, bool blessedScrollPreventsBreak)
+    public static EnchantmentDecision Decide(EnchantmentRulePreview preview, int currentLevel)
     {
-        int currentLevel = enchantment.level;
-        EnchantmentRulePreview preview = BuildPreview(
-            enchantment.Item,
-            EnchantmentDomainHelper.ResolveItemPrefabName(enchantment.Item),
-            currentLevel,
-            player,
-            useBlessedScroll,
-            blessedScrollPreventsBreak);
         if (RollPercent(preview.FinalChance))
         {
             return new EnchantmentDecision(EnchantmentOutcome.Success, currentLevel + 1, Notifications_UI.NotificationItemResult.Success);
@@ -369,9 +332,8 @@ public static class EnchantmentSideEffects
             Utils.IncreaseSkillEXP(Enchantment_Skill.SkillType_Enchantment, result.SkillExpGranted);
         }
 
-        if (result.NotificationType.HasValue &&
-            SyncedData.EnchantmentEnableNotifications.Value &&
-            SyncedData.EnchantmentNotificationMinLevel.Value <= result.CurrentLevel)
+        // Publish every attempt result; each destination applies its own display/webhook threshold.
+        if (result.NotificationType.HasValue)
         {
             string playerName = result.Player != null ? result.Player.GetPlayerName() : "No Name";
             Notifications_UI.AddNotification(playerName, result.ItemPrefabName, (int)result.NotificationType.Value, result.PreviousLevel, result.CurrentLevel);
@@ -385,17 +347,8 @@ public static class EnchantmentSideEffects
             return;
         }
 
-        ValheimEnchantmentSystem._thistype.DelayedInvoke(() =>
-        {
-            if (SyncedData.DropEnchantmentOnUpgrade.Value)
-            {
-                enchantment.Item?.Data().Remove<Enchantment_Core.Enchanted>();
-                Enchantment_VFX.UpdateGrid();
-                return;
-            }
-
-            Enchantment_VFX.UpdateGrid();
-        }, 1);
+        // Item quality upgrades always preserve the existing enchantment.
+        ValheimEnchantmentSystem._thistype.DelayedInvoke(Enchantment_VFX.UpdateGrid, 1);
     }
 
     public static void ApplyStateChanged(Enchantment_Core.Enchanted enchantment, bool refreshEquipment)

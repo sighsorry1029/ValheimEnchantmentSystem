@@ -4,16 +4,6 @@ public static class EnchantmentTierCatalog
 {
     private static readonly char[] OrderedTierValues = { 'F', 'E', 'D', 'C', 'B', 'A', 'S' };
     private static readonly HashSet<char> ValidTiers = new(OrderedTierValues);
-    private static readonly Dictionary<char, int> DefaultEnchantSkillExpByTier = new()
-    {
-        { 'F', 2 },
-        { 'E', 3 },
-        { 'D', 5 },
-        { 'C', 8 },
-        { 'B', 13 },
-        { 'A', 21 },
-        { 'S', 34 }
-    };
     private static readonly Dictionary<char, int> SkillScrollDefaultExpByTier = new()
     {
         { 'F', 2 },
@@ -69,37 +59,6 @@ public static class EnchantmentTierCatalog
     public static string GetDefaultBiomeTierValue(Heightmap.Biome biome)
     {
         return TryGetDefaultBiomeTier(biome, out char tier) ? tier.ToString() : string.Empty;
-    }
-
-    public static int GetDefaultEnchantSkillExp(char tier)
-    {
-        return DefaultEnchantSkillExpByTier.TryGetValue(char.ToUpperInvariant(tier), out int exp) ? exp : 0;
-    }
-
-    public static int GetEnchantSkillExp(char tier)
-    {
-        if (EnchantmentSettings.TryGetConfiguredEnchantSkillExp(tier, out int configuredExp))
-            return configuredExp;
-
-        return GetDefaultEnchantSkillExp(tier);
-    }
-
-    public static int GetEnchantSkillExp(string? prefabName)
-    {
-        if (!TryGetTierFromPrefabName(prefabName, out char tier))
-            return 0;
-
-        return GetEnchantSkillExp(tier);
-    }
-
-    public static bool TryGetTierFromPrefabName(string? prefabName, out char tier)
-    {
-        tier = default;
-        if (string.IsNullOrWhiteSpace(prefabName))
-            return false;
-
-        tier = char.ToUpperInvariant(prefabName[prefabName.Length - 1]);
-        return IsValid(tier);
     }
 
     public static int GetDefaultSkillScrollExp(char tier)

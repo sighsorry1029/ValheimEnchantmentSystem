@@ -3,20 +3,17 @@ namespace kg.ValheimEnchantmentSystem.Configs;
 public static class EnchantmentSettings
 {
     private static bool IsBound;
-    private static bool NotificationSettingsBound;
-    private static readonly Dictionary<char, ConfigEntry<int>> EnchantSkillExpByTier = new();
 
     public static ConfigEntry<int> SafetyLevel { get; private set; } = null!;
-    public static ConfigEntry<bool> DropEnchantmentOnUpgrade { get; private set; } = null!;
     public static ConfigEntry<SyncedData.ItemDesctructionTypeEnum> ItemFailureType { get; private set; } = null!;
     public static ConfigEntry<int> FailedEnchantLevelDecrease { get; private set; } = null!;
     public static ConfigEntry<bool> BlessedScrollsPreventBreak { get; private set; } = null!;
     public static ConfigEntry<int> BlessedScrollsAdditionalChance { get; private set; } = null!;
-    public static ConfigEntry<bool> AllowJewelcraftingMirrorCopyEnchant { get; private set; } = null!;
     public static ConfigEntry<float> AdditionalEnchantmentChancePerLevel { get; private set; } = null!;
     public static ConfigEntry<float> FailedEnchantSkillExpMultiplier { get; private set; } = null!;
-    public static ConfigEntry<int> EnchantmentNotificationMinLevel { get; private set; } = null!;
-    public static ConfigEntry<bool> EnchantmentEnableNotifications { get; private set; } = null!;
+    public static ConfigEntry<float> EnchantSkillExpBase { get; private set; } = null!;
+    public static ConfigEntry<float> EnchantSkillExpPerLevel { get; private set; } = null!;
+    public static ConfigEntry<float> EnchantSkillExpDifficultyBonus { get; private set; } = null!;
 
     public static void Bind()
     {
@@ -26,9 +23,7 @@ public static class EnchantmentSettings
         }
 
         SafetyLevel = ValheimEnchantmentSystem.config("Enchantment", "SafetyLevel", 3,
-            Display("The level below which failed enchantments stay at the current level. Set to 0 to disable.", ConfigurationManagerDisplay.Enchantment, "Safety Level", 990));
-        DropEnchantmentOnUpgrade = ValheimEnchantmentSystem.config("Enchantment", "DropEnchantmentOnUpgrade", false,
-            Display("Drop enchantment on item upgrade.", ConfigurationManagerDisplay.Enchantment, "Drop Enchantment On Upgrade", 800));
+            Display("Prevents level loss and item destruction on failure while the item's CURRENT enchantment level is below this value. Example with 3: failing +2 -> +3 keeps +2, but failing +3 -> +4 follows Item Failure Type. This does not guarantee a minimum retained level. Set to 0 to disable this protection. Blessed scroll protection is unaffected.", ConfigurationManagerDisplay.Enchantment, "Safety Level", 990));
         ItemFailureType = ValheimEnchantmentSystem.config("Enchantment", "ItemFailureType", SyncedData.ItemDesctructionTypeEnum.LevelDecrease,
             Display("LevelDecrease will remove FailedEnchantLevelDecrease levels on fail, Destroy will destroy item on fail, Combined will use yaml destroy chance and success chance, CombinedEasy will keep or decrease level and never destroy", ConfigurationManagerDisplay.Enchantment, "Item Failure Type", 1000));
         FailedEnchantLevelDecrease = ValheimEnchantmentSystem.config("Enchantment", "FailedEnchantLevelDecrease", 1,
@@ -42,8 +37,6 @@ public static class EnchantmentSettings
             Display("Blessed enchant scrolls prevent negative outcomes on failed enchant attempts. If set to false enchanting chance is increased instead.", ConfigurationManagerDisplay.Enchantment, "Blessed Scrolls Prevent Break", 900));
         BlessedScrollsAdditionalChance = ValheimEnchantmentSystem.config("Enchantment", "BlessedScrollsAdditionalChance", 25,
             Display("Enchanting chance added when using blessed enchant scrolls if the option to prevent breaking of an item in case of failed enchant is set to false.", ConfigurationManagerDisplay.Enchantment, "Blessed Scrolls Additional Chance", 890));
-        AllowJewelcraftingMirrorCopyEnchant = ValheimEnchantmentSystem.config("Enchantment", "AllowJewelcraftingMirrorCopyEnchant", false,
-            Display("Allow jewelcrafting to copy enchantment from one item to another using mirror.", ConfigurationManagerDisplay.Enchantment, "Allow Jewelcrafting Mirror Copy Enchant", 790));
         AdditionalEnchantmentChancePerLevel = ValheimEnchantmentSystem.config("Enchantment", "AdditionalEnchantmentChancePerLevel", 0.07f,
             Display("Additional enchantment chance per level of Enchantment skill.", ConfigurationManagerDisplay.Skill, "Enchant Chance Per Skill Level", 980));
         FailedEnchantSkillExpMultiplier = ValheimEnchantmentSystem.config("Enchantment", "FailedEnchantSkillExpMultiplier", 0.5f,
@@ -53,36 +46,31 @@ public static class EnchantmentSettings
                 "Failed Enchant Skill EXP Multiplier",
                 970,
                 new AcceptableValueRange<float>(0f, 2f)));
-        int enchantSkillExpOrder = 900;
-        foreach (char tier in EnchantmentTierCatalog.AllTiers)
-        {
-            EnchantSkillExpByTier[tier] = ValheimEnchantmentSystem.config(
-                "Enchantment",
-                $"Enchant Skill EXP {tier}",
-                EnchantmentTierCatalog.GetDefaultEnchantSkillExp(tier),
-                Display(
-                    $"Skill EXP granted when enchanting with a tier {tier} enchant scroll.",
-                    ConfigurationManagerDisplay.Skill,
-                    $"Enchant Skill EXP {tier}",
-                    enchantSkillExpOrder,
-                    new AcceptableValueRange<int>(0, 100)));
-            enchantSkillExpOrder -= 10;
-        }
+        EnchantSkillExpBase = ValheimEnchantmentSystem.config("Enchantment", "Enchant Skill EXP Base", 2f,
+            Display(
+                "Base EXP for successful enchantments, independent of scroll tier. Success EXP = Base + Per Level x (target enchant level - 1) + Difficulty Bonus x (1 - base success chance / 100). Uses the item level before the attempt and the YAML chance before skill or blessed bonuses. Attempts with 0% final success chance grant no EXP. Failure EXP uses Failed Enchant Skill EXP Multiplier; Skill Gain Factor applies to both outcomes. Set all three EXP values to 0 to disable enchantment EXP.",
+                ConfigurationManagerDisplay.Skill,
+                "Enchant Skill EXP Base",
+                960,
+                new AcceptableValueRange<float>(0f, 100f),
+                showRangeAsPercent: false));
+        EnchantSkillExpPerLevel = ValheimEnchantmentSystem.config("Enchantment", "Enchant Skill EXP Per Level", 0.5f,
+            Display(
+                "Success EXP added per existing enchantment level before the attempt. For +9 to +10, this value is multiplied by 9. Applies equally to all scroll tiers, including blessed scrolls.",
+                ConfigurationManagerDisplay.Skill,
+                "Enchant Skill EXP Per Level",
+                950,
+                new AcceptableValueRange<float>(0f, 10f),
+                showRangeAsPercent: false));
+        EnchantSkillExpDifficultyBonus = ValheimEnchantmentSystem.config("Enchantment", "Enchant Skill EXP Difficulty Bonus", 4f,
+            Display(
+                "Maximum extra success EXP from difficulty: this value x (1 - base success chance / 100). Uses the item's YAML chance, including overrides, clamped to 0-100% before skill or blessed bonuses. A 100% base chance adds no bonus; a 0% base chance adds the full bonus, but EXP is only granted if the final success chance is above 0%.",
+                ConfigurationManagerDisplay.Skill,
+                "Enchant Skill EXP Difficulty Bonus",
+                940,
+                new AcceptableValueRange<float>(0f, 100f),
+                showRangeAsPercent: false));
         IsBound = true;
-    }
-
-    internal static void BindNotificationSettings()
-    {
-        if (NotificationSettingsBound)
-        {
-            return;
-        }
-
-        EnchantmentEnableNotifications = ValheimEnchantmentSystem.config("Notifications", "EnchantmentEnableNotifications", true,
-            Display("Enable enchantment notifications.", ConfigurationManagerDisplay.Notifications, "Enable Enchantment Notifications", 1000));
-        EnchantmentNotificationMinLevel = ValheimEnchantmentSystem.config("Notifications", "EnchantmentNotificationMinLevel", 6,
-            Display("The minimum level of enchantment to show notification.", ConfigurationManagerDisplay.Notifications, "Notification Minimum Enchant Level", 990));
-        NotificationSettingsBound = true;
     }
 
     private static ConfigDescription Display(
@@ -90,20 +78,9 @@ public static class EnchantmentSettings
         string category,
         string displayName,
         int order,
-        AcceptableValueBase? acceptableValues = null)
+        AcceptableValueBase? acceptableValues = null,
+        bool? showRangeAsPercent = null)
     {
-        return ConfigurationManagerDisplay.Description(description, category, order, displayName, acceptableValues);
-    }
-
-    public static bool TryGetConfiguredEnchantSkillExp(char tier, out int exp)
-    {
-        exp = 0;
-        if (!EnchantSkillExpByTier.TryGetValue(char.ToUpperInvariant(tier), out ConfigEntry<int> config))
-        {
-            return false;
-        }
-
-        exp = config.Value;
-        return true;
+        return ConfigurationManagerDisplay.Description(description, category, order, displayName, acceptableValues, showRangeAsPercent);
     }
 }

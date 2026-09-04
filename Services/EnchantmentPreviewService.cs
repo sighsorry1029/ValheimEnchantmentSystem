@@ -116,7 +116,7 @@ public static class EnchantmentPreviewService
         preview.RequirementIcon = requirementDrop.m_itemData.GetIcon();
         string requirementDisplayName = requirementDrop.m_itemData.m_shared.m_name.Localize();
         int requirementNeededCount = 1;
-        int requirementCount = Utils.CustomCountItemsNoLevel(selectedRequirement.prefab);
+        int requirementCount = EnchantmentMaterialService.CountAvailable(Player.m_localPlayer, selectedRequirement.prefab);
         preview.HasRequiredItems = requirementCount >= requirementNeededCount;
         preview.RequirementStatusText = BuildRequirementStatusText(requirementDisplayName, requirementCount, requirementNeededCount);
     }

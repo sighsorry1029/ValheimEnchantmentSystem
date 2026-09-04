@@ -10,7 +10,7 @@ namespace kg.ValheimEnchantmentSystem;
 public static class Enchantment_VFX 
 { 
     private static readonly int TintColor = Shader.PropertyToID("_TintColor");
-    private const int MainVfxParticleBrightnessOrder = 700;
+    private const float MainVfxParticleBrightness = 1.5f;
     private const int MainVfxLightIntensityOrder = 690;
     private const int MainVfxTintIntensityOrder = 680;
     private const int ArmorVfxTintIntensityOrder = 670;
@@ -29,7 +29,6 @@ public static class Enchantment_VFX
     public static ConfigEntry<bool> _enableArmorVFX;
     public static ConfigEntry<float> _mainVfxTintIntensity;
     public static ConfigEntry<float> _mainVfxLightIntensity;
-    public static ConfigEntry<float> _mainVfxParticleBrightness;
     public static ConfigEntry<float> _armorVfxTintIntensity;
     private static int _visualConfigRevision;
     private static bool _sceneVisualRefreshScheduled;
@@ -550,11 +549,6 @@ public static class Enchantment_VFX
         VFXs.Add(ValheimEnchantmentSystem._asset.LoadAsset<Material>("Enchantment_VFX_Mat3")); 
         VFXs.Add(ValheimEnchantmentSystem._asset.LoadAsset<Material>("Enchantment_VFX_Mat4"));
         VES_MPE = ValheimEnchantmentSystem._asset.LoadAsset<GameObject>("VES_MPE");
-        _mainVfxParticleBrightness = ValheimEnchantmentSystem.ClientConfig(
-            "",
-            "MainVFXParticleBrightness",
-            1.5f,
-            ClientVfxDescription("Brightness of weapon/world/stand particle VFX.", "VFX - Main Particle Brightness", MainVfxParticleBrightnessOrder, 0f, 5f));
         _mainVfxLightIntensity = ValheimEnchantmentSystem.ClientConfig(
             "",
             "MainVFXLightIntensity",
@@ -582,7 +576,6 @@ public static class Enchantment_VFX
             ClientVfxDescription("Enable enchantment VFX for worn items like armor, capes, utility items, and their stands.", "VFX - Enable Armor VFX", EnableArmorVfxOrder));
         _enableWeaponVFX.SettingChanged += (_, _) => OnEquipmentVisualSettingChanged();
         _enableArmorVFX.SettingChanged += (_, _) => OnEquipmentVisualSettingChanged();
-        _mainVfxParticleBrightness.SettingChanged += (_, _) => OnEquipmentVisualSettingChanged();
         _mainVfxLightIntensity.SettingChanged += (_, _) => OnEquipmentVisualSettingChanged();
         _mainVfxTintIntensity.SettingChanged += (_, _) => OnEquipmentVisualSettingChanged();
         _armorVfxTintIntensity.SettingChanged += (_, _) => OnEquipmentVisualSettingChanged();
@@ -773,7 +766,7 @@ public static class Enchantment_VFX
     private static Color GetParticleColor(Color color)
     {
         Color.RGBToHSV(color, out float h, out float s, out float v);
-        float brightness = Mathf.Clamp01(v * _mainVfxParticleBrightness.Value);
+        float brightness = Mathf.Clamp01(v * MainVfxParticleBrightness);
         Color particleColor = Color.HSVToRGB(h, s, brightness, false);
         particleColor.a = color.a;
         return particleColor;

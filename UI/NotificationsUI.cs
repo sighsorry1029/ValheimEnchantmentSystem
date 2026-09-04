@@ -6,12 +6,13 @@ namespace kg.ValheimEnchantmentSystem.UI;
 
 public static class Notifications_UI
 {
-    private const int SuccessWebhooksOrder = 900;
-    private const int FailureWebhooksOrder = 800;
+    private const int SuccessWebhooksOrder = 840;
+    private const int FailureWebhooksOrder = 830;
 
     private static ConfigEntry<string> _successWebhooks = null!;
     private static ConfigEntry<string> _failureWebhooks = null!;
-    public static ConfigEntry<int> _duration;
+    private static ConfigEntry<int> _webhookMinLevel = null!;
+    private static ConfigEntry<int> _notificationMinLevel = null!;
     private const float FadeDuration = 0.25f;
 
 
@@ -53,7 +54,12 @@ public static class Notifications_UI
 
     internal static void Initialize()
     {
-        EnchantmentSettings.BindNotificationSettings();
+        _webhookMinLevel = ValheimEnchantmentSystem.config(
+            "Notifications",
+            "Webhook Minimum Enchant Level",
+            NotificationSettings.DefaultMinimumLevel,
+            NotificationSettings.CreateWebhookMinimumLevelDescription(),
+            false);
         _successWebhooks = ValheimEnchantmentSystem.config(
             "Notifications",
             "Success Webhooks",
@@ -73,25 +79,20 @@ public static class Notifications_UI
                 FailureWebhooksOrder),
             false);
         if (ValheimEnchantmentSystem.NoGraphics) return;
+        _notificationMinLevel = ValheimEnchantmentSystem.ClientConfig(
+            "Notifications",
+            "Minimum Enchant Level",
+            NotificationSettings.DefaultMinimumLevel,
+            NotificationSettings.CreateNotificationMinimumLevelDescription());
         _filterConfig = ValheimEnchantmentSystem.ClientConfig(
             "Notifications",
             "Filter",
             Filter.Success,
             ConfigurationManagerDisplay.Description(
-                "Filter notifications by type.",
+                "Filter in-game enchantment notifications by type. None hides all notifications on this client. Does not affect other players or webhook delivery. Notifications are displayed for 5 seconds.",
                 ConfigurationManagerDisplay.Client,
                 900,
                 "Notifications - Filter"));
-        _duration = ValheimEnchantmentSystem.ClientConfig(
-            "Notifications",
-            "Duration",
-            5,
-            ConfigurationManagerDisplay.Description(
-                "Duration of notifications in seconds.",
-                ConfigurationManagerDisplay.Client,
-                890,
-                "Notifications - Duration"));
-
         UI = UnityEngine.Object.Instantiate(ValheimEnchantmentSystem._asset.LoadAsset<GameObject>("kg_EnchantmentUI_Notification"));
         UI.name = "kg_EnchantmentUI_Notification";
         UI.SetActive(false);
@@ -112,7 +113,7 @@ public static class Notifications_UI
     {
         return ConfigurationManagerDisplay.Description(
             description,
-            ConfigurationManagerDisplay.Notifications,
+            ConfigurationManagerDisplay.General,
             order,
             displayName);
     }
@@ -138,7 +139,7 @@ public static class Notifications_UI
         if (!IsVisible()) return;
         _timer += Time.deltaTime;
 
-        int duration = _duration.Value;
+        float duration = NotificationRules.DisplayDurationSeconds;
 
         if (_timer >= duration)
             Hide();
@@ -176,14 +177,10 @@ public static class Notifications_UI
     {
         NotificationItemResult type = (NotificationItemResult)not.Type;
 
-        switch (type)
+        if (!NotificationRules.ShouldShowNotification(not.Type, not.Level, _notificationMinLevel.Value, _filterConfig.Value))
         {
-            case NotificationItemResult.Success when !_filterConfig.Value.HasFlagFast(Filter.Success):
-                _dequeueTimer = 0f;
-                return;
-            case NotificationItemResult.LevelDecrease or NotificationItemResult.Destroyed when !_filterConfig.Value.HasFlagFast(Filter.Fail):
-                _dequeueTimer = 0f;
-                return;
+            _dequeueTimer = 0f;
+            return;
         }
 
 
@@ -240,7 +237,6 @@ public static class Notifications_UI
         ItemDrop itemDrop = ZNetScene.instance.GetPrefab(itemPrefab)?.GetComponent<ItemDrop>();
         if (itemDrop == null || SyncedData.GetReqs(itemPrefab) == null) return false;
         if (!SyncedData.IsLevelEnchantable(itemPrefab, prevLevel, itemDrop.m_itemData.IsWeapon())) return false;
-        if (level < SyncedData.EnchantmentNotificationMinLevel.Value) return false;
 
         NotificationItemResult result = (NotificationItemResult)type;
         return result switch
@@ -286,6 +282,8 @@ public static class Notifications_UI
 
     private static void TrySendDiscordNotification(string playerName, string itemPrefab, NotificationItemResult type, int prevLevel, int level)
     {
+        if (!NotificationRules.MeetsMinimumLevel(level, _webhookMinLevel.Value)) return;
+
         string localizedItemName = itemPrefab;
         if (ZNetScene.instance.GetPrefab(itemPrefab)?.GetComponent<ItemDrop>() is { } itemDrop)
             localizedItemName = itemDrop.m_itemData.m_shared.m_name.Localize();
@@ -339,13 +337,7 @@ public static class Notifications_UI
                 (long sender, string playerName, string itemPrefab, int type, int prevLevel, int level) =>
                 {
                     if (!IsServerSender(sender)) return;
-                    switch ((NotificationItemResult)type)
-                    {
-                        case NotificationItemResult.Success when !_filterConfig.Value.HasFlagFast(Filter.Success):
-                            return;
-                        case NotificationItemResult.LevelDecrease or NotificationItemResult.Destroyed when !_filterConfig.Value.HasFlagFast(Filter.Fail):
-                            return;
-                    }
+                    if (!NotificationRules.ShouldShowNotification(type, level, _notificationMinLevel.Value, _filterConfig.Value)) return;
 
                     _notifications.Enqueue(new Notification
                     {

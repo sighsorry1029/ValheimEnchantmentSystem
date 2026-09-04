@@ -10,7 +10,8 @@ public static class IntegrationRegistry
     {
         AugaIntegration.Instance,
         JewelcraftingIntegration.Instance,
-        ExpandWorldDataIntegration.Instance
+        ExpandWorldDataIntegration.Instance,
+        AzuCraftyBoxesIntegration.Instance
     };
 
     private static readonly List<IInventoryGridCompatibility> InventoryGridCompatibilities = new();

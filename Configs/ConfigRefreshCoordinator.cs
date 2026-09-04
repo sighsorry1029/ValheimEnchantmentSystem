@@ -35,12 +35,10 @@ internal static class ConfigRefreshCoordinator
     private static void RegisterSettingRefreshHandlers()
     {
         EnchantmentSettings.SafetyLevel.SettingChanged += (_, _) => RequestRefresh(ConfigRefreshScope.Ui);
-        EnchantmentSettings.DropEnchantmentOnUpgrade.SettingChanged += (_, _) => RequestRefresh(ConfigRefreshScope.Ui);
         EnchantmentSettings.ItemFailureType.SettingChanged += (_, _) => RequestRefresh(ConfigRefreshScope.Ui);
         EnchantmentSettings.FailedEnchantLevelDecrease.SettingChanged += (_, _) => RequestRefresh(ConfigRefreshScope.Ui);
         EnchantmentSettings.BlessedScrollsPreventBreak.SettingChanged += (_, _) => RequestRefresh(ConfigRefreshScope.Ui);
         EnchantmentSettings.BlessedScrollsAdditionalChance.SettingChanged += (_, _) => RequestRefresh(ConfigRefreshScope.Ui);
-        EnchantmentSettings.AllowJewelcraftingMirrorCopyEnchant.SettingChanged += (_, _) => RequestRefresh(ConfigRefreshScope.Ui);
         EnchantmentSettings.AdditionalEnchantmentChancePerLevel.SettingChanged += (_, _) => RequestRefresh(ConfigRefreshScope.Ui);
     }
 

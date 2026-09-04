@@ -10,7 +10,8 @@ internal static class ThinItemManager
     // Hammer alone appears too early during ObjectDB bootstrap; gate on a late vanilla item as well.
     private static readonly string[] ObjectDbReadinessSentinels = { "Hammer", "TrophyFader" };
     private const string FixedScrollCraftingStationName = "kg_EnchantmentScrollStation";
-    private const string ScrollRecipeConfigSection = ConfigurationManagerDisplay.ScrollRecipes;
+    // Keep the persisted section independent of Configuration Manager's display numbering.
+    private const string ScrollRecipeConfigSection = "8 - Scroll Recipes";
 
     private sealed class ItemConfig
     {

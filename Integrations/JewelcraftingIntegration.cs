@@ -1,5 +1,4 @@
 using BepInEx.Bootstrap;
-using kg.ValheimEnchantmentSystem.Configs;
 
 namespace kg.ValheimEnchantmentSystem.Integrations;
 
@@ -24,10 +23,7 @@ internal sealed class JewelcraftingIntegration : IOptionalIntegration
 
     private bool OnItemMirror(ItemDrop.ItemData item)
     {
-        if (!SyncedData.AllowJewelcraftingMirrorCopyEnchant.Value)
-        {
-            item.m_customData.Remove(EnchantmentDataKey);
-        }
+        item.m_customData.Remove(EnchantmentDataKey);
 
         return true;
     }

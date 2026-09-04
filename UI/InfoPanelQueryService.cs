@@ -115,14 +115,21 @@ internal static class InfoPanelQueryService
 
     private static InfoPanelEntryModel CreateGuideEntry()
     {
+        List<string> guideLines = new()
+        {
+            "• $enchantment_info_guide_search".Localize(),
+            "• $enchantment_info_guide_tabs".Localize()
+        };
+        string combineInstruction = ScrollCombineService.GetCombineInstructionText();
+        if (!string.IsNullOrEmpty(combineInstruction))
+        {
+            guideLines.Add($"• {combineInstruction}");
+        }
+
         return new InfoPanelEntryModel
         {
             AdditionalText = "$enchantment_info_guide".Localize(),
-            BodyText = string.Join(
-                "\n",
-                "• $enchantment_info_guide_search".Localize(),
-                "• $enchantment_info_guide_tabs".Localize(),
-                $"• {ScrollCombineService.GetCombineInstructionText()}"),
+            BodyText = string.Join("\n", guideLines),
             StartExpanded = true
         };
     }

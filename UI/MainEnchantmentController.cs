@@ -13,12 +13,10 @@ internal sealed class MainEnchantmentController
     private readonly Sprite _defaultQuestionMark;
     private readonly GameObject _completionVfxPrefab;
     private readonly AudioClip _oneSecondClip;
-    private readonly AudioClip _threeSecondClip;
-    private readonly AudioClip _sixSecondClip;
     private readonly AudioClip _successSound;
     private readonly AudioClip _failSound;
     private readonly Func<AudioSource?> _audioSourceProvider;
-    private readonly Func<int> _animationDurationProvider;
+    private readonly Func<float> _animationDurationProvider;
     private readonly Action _playClick;
     private readonly Action<InfoPanelCategory, string?> _showInfo;
     private readonly Func<bool> _isInfoVisible;
@@ -38,12 +36,10 @@ internal sealed class MainEnchantmentController
         Sprite defaultQuestionMark,
         GameObject completionVfxPrefab,
         AudioClip oneSecondClip,
-        AudioClip threeSecondClip,
-        AudioClip sixSecondClip,
         AudioClip successSound,
         AudioClip failSound,
         Func<AudioSource?> audioSourceProvider,
-        Func<int> animationDurationProvider,
+        Func<float> animationDurationProvider,
         Action playClick,
         Action<InfoPanelCategory, string?> showInfo,
         Func<bool> isInfoVisible)
@@ -52,8 +48,6 @@ internal sealed class MainEnchantmentController
         _defaultQuestionMark = defaultQuestionMark;
         _completionVfxPrefab = completionVfxPrefab;
         _oneSecondClip = oneSecondClip;
-        _threeSecondClip = threeSecondClip;
-        _sixSecondClip = sixSecondClip;
         _successSound = successSound;
         _failSound = failSound;
         _audioSourceProvider = audioSourceProvider;
@@ -104,7 +98,9 @@ internal sealed class MainEnchantmentController
     public void Show()
     {
         ResetState();
-        if (!InventoryGui.IsVisible())
+        // IsVisible includes a short hidden-frame grace period after closing the inventory.
+        // A global shortcut must reopen the actual window even during that period.
+        if (!InventoryGui.instance.m_animator.GetBool("visible"))
         {
             InventoryGui.instance.Show(null);
         }
@@ -219,8 +215,22 @@ internal sealed class MainEnchantmentController
         }
 
         _enchantProcessing = true;
-        _timerMax = _animationDurationProvider();
+        _timerMax = EnchantmentAnimationTiming.NormalizeDuration(_animationDurationProvider());
         _enchantTimer = _timerMax;
+        _view.ItemVisual.color = Color.clear;
+        _view.ScrollVisual.color = Color.clear;
+        SetChanceHudVisible(false);
+        _view.UseBlessRoot.gameObject.SetActive(false);
+        _view.ItemText.text = string.Empty;
+        _view.ScrollText.text = string.Empty;
+
+        // Complete through the same validated result path, without starting a timer, progress VFX, or waiting sound.
+        if (_timerMax <= 0f)
+        {
+            FinishEnchantment();
+            return;
+        }
+
         _view.StartText.text = "$enchantment_cancel".Localize();
         _view.ProgressRoot.gameObject.SetActive(true);
         _view.ProgressFill.fillAmount = 0f;
@@ -228,12 +238,6 @@ internal sealed class MainEnchantmentController
         ParticleSystem.MainModule progressVfxMain = _view.ProgressVfx.main;
         progressVfxMain.startColor = _useBless ? VfxDefaultBless : Color.white;
         _view.ProgressAccent.color = _useBless ? Color.yellow : Color.white;
-        _view.ItemVisual.color = Color.clear;
-        _view.ScrollVisual.color = Color.clear;
-        SetChanceHudVisible(false);
-        _view.UseBlessRoot.gameObject.SetActive(false);
-        _view.ItemText.text = string.Empty;
-        _view.ScrollText.text = string.Empty;
         SetTrailSpeed(_view.ItemTrail, 1f);
         SetTrailSpeed(_view.ScrollTrail, 1f);
         PlayAnimationClip();
@@ -490,7 +494,7 @@ internal sealed class MainEnchantmentController
 
     private void UpdateAnimation()
     {
-        float progress = 1f - (_enchantTimer / _timerMax);
+        float progress = EnchantmentAnimationTiming.GetProgress(_enchantTimer, _timerMax);
         _view.ProgressFill.fillAmount = progress;
         _view.ProgressVfxRect.anchoredPosition = new Vector2(300f * progress, 0f);
 
@@ -506,6 +510,8 @@ internal sealed class MainEnchantmentController
 
     private void FinishEnchantment()
     {
+        // Sub-second animations must not leave the one-second waiting clip playing over the result.
+        StopAudio();
         _view.ItemRect.anchoredPosition = Vector2.zero;
         _view.ItemRoot.localScale = new Vector3(1.4f, 1.4f, 1f);
         _enchantProcessing = false;
@@ -542,7 +548,7 @@ internal sealed class MainEnchantmentController
         }
 
         source.Stop();
-        source.clip = _timerMax <= 1 ? _oneSecondClip : _timerMax <= 3 ? _threeSecondClip : _sixSecondClip;
+        source.clip = _oneSecondClip;
         source.Play();
     }
 

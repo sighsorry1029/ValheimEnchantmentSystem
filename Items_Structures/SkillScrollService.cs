@@ -31,13 +31,20 @@ public static class SkillScrollService
                 "Skill Scrolls",
                 $"Skill EXP Scroll {tier}",
                 EnchantmentTierCatalog.GetDefaultSkillScrollExp(tier),
-                ConfigurationManagerDisplay.Description(
-                    $"Skill EXP granted by a tier {tier} skill scroll.",
-                    ConfigurationManagerDisplay.Skill,
-                    skillScrollExpOrder,
-                    $"Skill Scroll EXP {tier}"));
+                CreateSkillScrollExpDescription(tier, skillScrollExpOrder));
             skillScrollExpOrder -= 10;
         }
+    }
+
+    internal static ConfigDescription CreateSkillScrollExpDescription(char tier, int order)
+    {
+        return ConfigurationManagerDisplay.Description(
+            $"Skill EXP granted by a tier {tier} skill scroll, from 0 to 100. Set to 0 to disable consumption of this tier's skill scroll.",
+            ConfigurationManagerDisplay.Skill,
+            order,
+            $"Skill Scroll EXP {tier}",
+            new AcceptableValueRange<int>(0, 100),
+            showRangeAsPercent: false);
     }
 
     public static void RegisterSkillScrollPrefab(GameObject skillScrollPrefab)

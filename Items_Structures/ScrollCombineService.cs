@@ -9,13 +9,13 @@ namespace kg.ValheimEnchantmentSystem.Items_Structures;
 
 internal static class ScrollCombineService
 {
-    private const int AllowCombineOrder = 940;
-    private const int RequiredShapeOrder = 930;
+    private const int CombineModeOrder = 940;
 
-    private enum RequiredShape
+    internal enum CombineMode
     {
-        [Description("three in a row")] Row3,
-        [Description("five in a cross")] Cross5
+        [Description("Off")] Off,
+        [Description("Three in a row")] Row3,
+        [Description("Five in a cross")] Cross5
     }
 
     private sealed class OverlayRefs
@@ -58,8 +58,7 @@ internal static class ScrollCombineService
         public int GetHashCode(T obj) => RuntimeHelpers.GetHashCode(obj);
     }
 
-    private static ConfigEntry<bool> _allowScrollCombine = null!;
-    private static ConfigEntry<RequiredShape> _requiredShape = null!;
+    private static ConfigEntry<CombineMode> _combineMode = null!;
     private static GameObject _combineOutline = null!;
     private static readonly HashSet<GameObject> InitializedElementPrefabs = new();
     private static readonly Dictionary<int, GridState> GridStates = new();
@@ -74,29 +73,26 @@ internal static class ScrollCombineService
         }
 
         _initialized = true;
-        _allowScrollCombine = ValheimEnchantmentSystem.config(
+        _combineMode = ValheimEnchantmentSystem.config(
             "Scrolls",
-            "Allow Combine",
-            true,
-            ConfigurationManagerDisplay.Description(
-                "Allow combining scrolls by arranging those in a certain shape and right-clicking the center.",
-                ConfigurationManagerDisplay.Scrolls,
-                AllowCombineOrder,
-                "Allow Combine"));
-        _requiredShape = ValheimEnchantmentSystem.config(
-            "Scrolls",
-            "Required Shape",
-            RequiredShape.Cross5,
-            ConfigurationManagerDisplay.Description(
-                "What shape of matching scrolls is required to combine them.",
-                ConfigurationManagerDisplay.Scrolls,
-                RequiredShapeOrder,
-                "Required Combine Shape"));
+            "Combine Mode",
+            CombineMode.Cross5,
+            CreateCombineModeDescription());
         _combineOutline = ValheimEnchantmentSystem._asset.LoadAsset<GameObject>("Enchantment_CombinePart");
-        _allowScrollCombine.SettingChanged += (_, _) => RequestRefreshAll();
-        _requiredShape.SettingChanged += (_, _) => RequestRefreshAll();
+        _combineMode.SettingChanged += (_, _) => RequestRefreshAll();
         EngineEvents.MainMenuAwake += OnMainMenuAwake;
     }
+
+    internal static ConfigDescription CreateCombineModeDescription()
+    {
+        return ConfigurationManagerDisplay.Description(
+            "Scroll combining mode. Off disables combining, inventory indicators, and combine tooltips. Row3 requires three matching scrolls in a horizontal row; Cross5 requires five matching scrolls in a cross. Right-click the center scroll to combine. In the cfg file, use Off, Row3, or Cross5. Default: Cross5.",
+            ConfigurationManagerDisplay.Scrolls,
+            CombineModeOrder,
+            "Combine Mode");
+    }
+
+    internal static bool IsCombineEnabled(CombineMode mode) => mode is CombineMode.Row3 or CombineMode.Cross5;
 
     private static void OnMainMenuAwake(FejdStartup _)
     {
@@ -252,13 +248,13 @@ internal static class ScrollCombineService
             overlay.Root?.SetActive(false);
         }
 
-        if (!_allowScrollCombine.Value)
+        if (!IsCombineEnabled(_combineMode.Value))
         {
             return true;
         }
 
-        bool row3Visible = _requiredShape.Value == RequiredShape.Row3;
-        bool cross5Visible = _requiredShape.Value == RequiredShape.Cross5;
+        bool row3Visible = _combineMode.Value == CombineMode.Row3;
+        bool cross5Visible = _combineMode.Value == CombineMode.Cross5;
 
         foreach (ItemDrop.ItemData item in inventory.GetAllItems())
         {
@@ -383,7 +379,7 @@ internal static class ScrollCombineService
 
     public static void TryCombineAt(InventoryGrid inventoryGrid, UIInputHandler element)
     {
-        if (!_allowScrollCombine.Value || inventoryGrid == null || element == null)
+        if (!IsCombineEnabled(_combineMode.Value) || inventoryGrid == null || element == null)
         {
             return;
         }
@@ -420,7 +416,7 @@ internal static class ScrollCombineService
 
     public static void AppendCombineTooltip(ItemDrop.ItemData item, bool crafting, ref string tooltip)
     {
-        if (!_allowScrollCombine.Value || !ScrollRegistry.IsUpgradeableScroll(item))
+        if (!IsCombineEnabled(_combineMode.Value) || !ScrollRegistry.IsUpgradeableScroll(item))
         {
             return;
         }
@@ -430,31 +426,39 @@ internal static class ScrollCombineService
 
     public static string GetCombineInstructionText()
     {
-        return "$enchantment_putinlinetocombine".Localize(GetRequiredShapeMarkup());
+        CombineMode mode = _initialized ? _combineMode.Value : CombineMode.Cross5;
+        string shapeMarkup = GetCombineShapeMarkup(mode);
+        return string.IsNullOrEmpty(shapeMarkup)
+            ? string.Empty
+            : "$enchantment_putinlinetocombine".Localize(shapeMarkup);
     }
 
-    private static string GetRequiredShapeMarkup()
+    internal static string GetCombineShapeMarkup(CombineMode mode)
     {
-        RequiredShape shape = _initialized ? _requiredShape.Value : RequiredShape.Cross5;
-        return shape == RequiredShape.Row3 ? "<color=yellow><b>-</b></color>" : "<color=yellow><b>+</b></color>";
+        return mode switch
+        {
+            CombineMode.Row3 => "<color=yellow><b>-</b></color>",
+            CombineMode.Cross5 => "<color=yellow><b>+</b></color>",
+            _ => string.Empty
+        };
     }
 
     private static bool CanCombine(ItemDrop.ItemData item, Inventory grid, out int toInstantiate)
     {
-        return _requiredShape.Value switch
+        return _combineMode.Value switch
         {
-            RequiredShape.Row3 => HaveSurrounds3(item, grid, out toInstantiate),
-            RequiredShape.Cross5 => HaveSurrounds5(item, grid, out toInstantiate),
+            CombineMode.Row3 => HaveSurrounds3(item, grid, out toInstantiate),
+            CombineMode.Cross5 => HaveSurrounds5(item, grid, out toInstantiate),
             _ => ReturnFalse(out toInstantiate)
         };
     }
 
     private static bool TryConsumePattern(ItemDrop.ItemData item, Inventory grid, out int toInstantiate)
     {
-        return _requiredShape.Value switch
+        return _combineMode.Value switch
         {
-            RequiredShape.Row3 => HaveSurrounds3(item, grid, out toInstantiate, true),
-            RequiredShape.Cross5 => HaveSurrounds5(item, grid, out toInstantiate, true),
+            CombineMode.Row3 => HaveSurrounds3(item, grid, out toInstantiate, true),
+            CombineMode.Cross5 => HaveSurrounds5(item, grid, out toInstantiate, true),
             _ => ReturnFalse(out toInstantiate)
         };
     }

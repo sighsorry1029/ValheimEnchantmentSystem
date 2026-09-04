@@ -87,16 +87,15 @@ public static class SyncedData
     public enum ItemDesctructionTypeEnum{ LevelDecrease, Destroy, Combined, CombinedEasy }
     
     public static ConfigEntry<int> SafetyLevel => EnchantmentSettings.SafetyLevel;
-    public static ConfigEntry<bool> DropEnchantmentOnUpgrade => EnchantmentSettings.DropEnchantmentOnUpgrade;
     public static ConfigEntry<ItemDesctructionTypeEnum> ItemFailureType => EnchantmentSettings.ItemFailureType;
     public static ConfigEntry<int> FailedEnchantLevelDecrease => EnchantmentSettings.FailedEnchantLevelDecrease;
     public static ConfigEntry<bool> BlessedScrollsPreventBreak => EnchantmentSettings.BlessedScrollsPreventBreak;
     public static ConfigEntry<int> BlessedScrollsAdditionalChance => EnchantmentSettings.BlessedScrollsAdditionalChance;
-    public static ConfigEntry<bool> AllowJewelcraftingMirrorCopyEnchant => EnchantmentSettings.AllowJewelcraftingMirrorCopyEnchant;
     public static ConfigEntry<float> AdditionalEnchantmentChancePerLevel => EnchantmentSettings.AdditionalEnchantmentChancePerLevel;
     public static ConfigEntry<float> FailedEnchantSkillExpMultiplier => EnchantmentSettings.FailedEnchantSkillExpMultiplier;
-    public static ConfigEntry<int> EnchantmentNotificationMinLevel => EnchantmentSettings.EnchantmentNotificationMinLevel;
-    public static ConfigEntry<bool> EnchantmentEnableNotifications => EnchantmentSettings.EnchantmentEnableNotifications;
+    public static ConfigEntry<float> EnchantSkillExpBase => EnchantmentSettings.EnchantSkillExpBase;
+    public static ConfigEntry<float> EnchantSkillExpPerLevel => EnchantmentSettings.EnchantSkillExpPerLevel;
+    public static ConfigEntry<float> EnchantSkillExpDifficultyBonus => EnchantmentSettings.EnchantSkillExpDifficultyBonus;
 
     public static readonly CustomSyncedValue<Dictionary<int, Chance_Data>> Synced_EnchantmentChances_Weapons =
         new(ValheimEnchantmentSystem.ConfigSync, "EnchantmentGlobalChances_Weapons",
