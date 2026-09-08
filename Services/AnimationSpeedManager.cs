@@ -15,7 +15,6 @@ public static class AnimationSpeedManager
     private static Handler[][] _handlers = Array.Empty<Handler[]>();
     private static bool _markerPatchInstalled;
     private static bool _wrapperInstalled;
-    private static int _handlerIndex;
     private static bool _changed;
 
     public delegate double Handler(Character character, double speed);
@@ -47,18 +46,27 @@ public static class AnimationSpeedManager
 
     private static void Wrapper(Character ___m_character, Animator ___m_animator)
     {
-        double currentSpeedMarker = ___m_animator.speed * 1e7 % 100;
-        if (currentSpeedMarker is > 10 and < 30 || ___m_animator.speed <= 0.001f)
+        // Each priority group observes the preceding group's guarded, normalized Animator write.
+        foreach (Handler[] handlers in _handlers)
         {
-            return;
-        }
+            double currentSpeedMarker = ___m_animator.speed * 1e7 % 100;
+            if (currentSpeedMarker is > 10 and < 30 || ___m_animator.speed <= 0.001f)
+            {
+                return;
+            }
 
-        double speed = ___m_animator.speed;
-        double newSpeed = _handlers[_handlerIndex++].Aggregate(speed, (current, handler) => handler(___m_character, current));
-        if (Math.Abs(newSpeed - speed) > double.Epsilon)
-        {
-            ___m_animator.speed = (float)(newSpeed - newSpeed % 1e-5);
-            _changed = true;
+            double speed = ___m_animator.speed;
+            double newSpeed = speed;
+            foreach (Handler handler in handlers)
+            {
+                newSpeed = handler(___m_character, newSpeed);
+            }
+
+            if (Math.Abs(newSpeed - speed) > double.Epsilon)
+            {
+                ___m_animator.speed = (float)(newSpeed - newSpeed % 1e-5);
+                _changed = true;
+            }
         }
     }
 
@@ -75,7 +83,5 @@ public static class AnimationSpeedManager
 
             _changed = false;
         }
-
-        _handlerIndex = 0;
     }
 }

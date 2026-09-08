@@ -501,11 +501,10 @@ internal static class ScrollCombineService
         }
 
         toInstantiate = Mathf.Min(item.m_stack, leftItem.m_stack, rightItem.m_stack);
-        if (removeIfTrue)
+        if (removeIfTrue && !TryConsumePatternItems(grid, toInstantiate, item, leftItem, rightItem))
         {
-            grid.RemoveItem(item, toInstantiate);
-            grid.RemoveItem(leftItem, toInstantiate);
-            grid.RemoveItem(rightItem, toInstantiate);
+            toInstantiate = 0;
+            return false;
         }
 
         return true;
@@ -548,16 +547,79 @@ internal static class ScrollCombineService
         }
 
         toInstantiate = Mathf.Min(item.m_stack, leftItem.m_stack, rightItem.m_stack, upItem.m_stack, downItem.m_stack);
-        if (removeIfTrue)
+        if (removeIfTrue && !TryConsumePatternItems(grid, toInstantiate, item, leftItem, rightItem, upItem, downItem))
         {
-            grid.RemoveItem(item, toInstantiate);
-            grid.RemoveItem(leftItem, toInstantiate);
-            grid.RemoveItem(rightItem, toInstantiate);
-            grid.RemoveItem(upItem, toInstantiate);
-            grid.RemoveItem(downItem, toInstantiate);
+            toInstantiate = 0;
+            return false;
         }
 
         return true;
+    }
+
+    private static bool TryConsumePatternItems(Inventory inventory, int amount, params ItemDrop.ItemData[] items)
+    {
+        string prefabName = items[0].m_dropPrefab.name;
+        long ReadTotal()
+        {
+            long count = 0;
+            foreach (ItemDrop.ItemData item in inventory.GetAllItems())
+            {
+                if (item?.m_dropPrefab?.name != prefabName) continue;
+                if (item.m_stack < 0) throw new InvalidOperationException("A material stack has an invalid count.");
+                count += item.m_stack;
+            }
+            return count;
+        }
+
+        bool consumed = TryConsumeStacks(amount,
+            () => items.Select(item => inventory.ContainsItem(item) ? item.m_stack : 0).ToArray(),
+            ReadTotal,
+            index => inventory.RemoveItem(items[index], amount), out string failure);
+        if (!consumed)
+        {
+            // A callback may have changed another stack or moved an item. Never mint a refund from an uncertain removal.
+            Utils.print($"Scroll combining stopped without creating output: {failure} Already removed scrolls were not automatically restored.", ConsoleColor.Yellow);
+        }
+        return consumed;
+    }
+
+    internal static bool TryConsumeStacks(int amount, Func<int[]> readStacks, Func<long> readTotal, Func<int, bool> removeAt, out string failure)
+    {
+        failure = string.Empty;
+        try
+        {
+            int[] expected = readStacks();
+            long expectedTotal = readTotal();
+            if (amount <= 0 || expected.Length == 0 || expected.Any(stack => stack < amount) || expectedTotal < (long)expected.Length * amount)
+            {
+                failure = "A required stack is missing or no longer contains the requested amount.";
+                return false;
+            }
+
+            for (int index = 0; index < expected.Length; ++index)
+            {
+                if (!readStacks().SequenceEqual(expected) || readTotal() != expectedTotal)
+                {
+                    failure = "The pattern changed before removal.";
+                    return false;
+                }
+
+                bool removed = removeAt(index);
+                expected[index] -= amount;
+                expectedTotal -= amount;
+                if (!readStacks().SequenceEqual(expected) || readTotal() != expectedTotal || !removed)
+                {
+                    failure = "Removal did not confirm the exact requested change to the pattern.";
+                    return false;
+                }
+            }
+            return true;
+        }
+        catch (Exception error)
+        {
+            failure = $"Material removal could not be confirmed: {error.Message}";
+            return false;
+        }
     }
 
     private static bool MatchesSamePrefab(ItemDrop.ItemData centerItem, params ItemDrop.ItemData[] surroundingItems)

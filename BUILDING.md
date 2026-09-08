@@ -39,7 +39,7 @@ The build resolves `YamlDotNet.dll` in this order:
 
 ```powershell
 $env:VALHEIM_DIR="C:\Program Files (x86)\Steam\steamapps\common\Valheim"
-dotnet build ValheimEnchantmentSystem.csproj
+dotnet build ValheimEnchantmentSystem.csproj -c Debug -p:DeployToGame=true
 ```
 
 Optional explicit dependency paths:
@@ -47,23 +47,25 @@ Optional explicit dependency paths:
 ```powershell
 $env:VALHEIM_SERVER_SYNC_DLL="C:\path\to\ServerSync.dll"
 $env:VALHEIM_YAMLDOTNET_DLL="C:\path\to\YamlDotNet.dll"
-dotnet build ValheimEnchantmentSystem.csproj
+dotnet build ValheimEnchantmentSystem.csproj -c Debug -p:DeployToGame=true
 ```
 
 ## Build
 
 ```powershell
 nuget restore ValheimEnchantmentSystem.sln
-dotnet build ValheimEnchantmentSystem.csproj
-dotnet build ValheimEnchantmentSystem.csproj -c Release
+dotnet build ValheimEnchantmentSystem.csproj -c Debug -p:DeployToGame=true
 ```
 
-A Release build creates the versioned Thunderstore archive in `Thunderstore/` and the Nexus archive in `artifacts/`.
+Debug deployment copies only the final merged plugin DLL to `$(ValheimDir)\BepInEx\plugins` after successful post-processing. Use `-p:DeployToGame=false` to skip copying or `-p:GamePluginDir="path\to\plugins"` to override the destination. Verify the source and destination DLL SHA-256 hashes after deployment.
+
+Run a Release build only when a release is explicitly requested. It creates the versioned Thunderstore archive in `Thunderstore/` and the Nexus archive in `artifacts/`. Before building, check the release manager's project name, watched ZIP folder, team, target sites, and Hexium installation scope: a newly generated ZIP in a registered folder can upload automatically.
 
 Run the deterministic enchantment rule checks after changing chance, skill bonus, or failure behavior:
 
 ```powershell
-dotnet run --project .\Tests\ValheimEnchantmentSystem.RuleTests.csproj -c Release
+dotnet build .\Tests\ValheimEnchantmentSystem.RuleTests.csproj -c Debug -p:BuildProjectReferences=false
+.\Tests\bin\Debug\net48\ValheimEnchantmentSystem.RuleTests.exe
 ```
 
 ## Version bump
@@ -71,7 +73,7 @@ dotnet run --project .\Tests\ValheimEnchantmentSystem.RuleTests.csproj -c Releas
 Update all release version fields before building a new package:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Set-Version.ps1 -Version 1.9.13
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Set-Version.ps1 -Version 1.9.15
 dotnet build ValheimEnchantmentSystem.csproj -c Release
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Set-Version.ps1 -Check
 ```

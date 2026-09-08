@@ -335,7 +335,7 @@ public static class Utils
     public static void InstantiateItem(GameObject prefab, int count, int level, Inventory overrideInventory = null)
     {
         Player p = Player.m_localPlayer;
-        if (!p || !prefab || count == 0) return;
+        if (!p || !prefab || count <= 0 || ZNetScene.instance == null) return;
 
         Inventory inventory = overrideInventory ?? p.m_inventory;
 
@@ -351,11 +351,7 @@ public static class Utils
             itemDrop.m_itemData.m_durability = itemDrop.m_itemData.GetMaxDurability();
             itemDrop.Save();
             go.SetActive(true);
-            if (inventory.CanAddItem(go))
-            {
-                inventory.AddItem(itemDrop.m_itemData);
-                ZNetScene.instance.Destroy(go);
-            }
+            TryTransferPreparedItem(itemDrop, inventory);
         }
         else
         {
@@ -368,12 +364,113 @@ public static class Utils
                 itemDrop.m_itemData.m_durability = itemDrop.m_itemData.GetMaxDurability();
                 itemDrop.Save();
                 go.SetActive(true);
-                if (inventory.CanAddItem(go))
+                if (!TryTransferPreparedItem(itemDrop, inventory)) return;
+            }
+        }
+    }
+
+    private static bool TryTransferPreparedItem(ItemDrop itemDrop, Inventory inventory)
+    {
+        ItemDrop.ItemData prepared = itemDrop.m_itemData;
+        string name = prepared.m_shared.m_name;
+        int quality = prepared.m_quality;
+        int worldLevel = prepared.m_worldLevel;
+        bool known = TryAddItemAndGetRemainder(prepared.m_stack,
+            () => CountOutputTransferItems(inventory.GetAllItems(), name, quality, worldLevel),
+            // AddItem may retain its argument in the inventory. Keep the prepared world item's data independent.
+            () => inventory.CanAddItem(itemDrop.gameObject) && inventory.AddItem(prepared.Clone()),
+            out int remaining, out string failure);
+        if (!known)
+        {
+            // The prepared output belongs to this call. Revoke only our currently owned output; never guess an inventory refund.
+            // Local deactivation alone would leave its full stack in the replicated ZDO.
+            try
+            {
+                ZNetView view = itemDrop.GetComponent<ZNetView>();
+                if (ZNetScene.instance != null && ZDOMan.instance != null && view != null && view.IsValid() && view.IsOwner())
                 {
-                    inventory.AddItem(itemDrop.m_itemData);
-                    ZNetScene.instance.Destroy(go);
+                    string outputId = view.GetZDO().m_uid.ToString();
+                    ZNetScene.instance.Destroy(itemDrop.gameObject);
+                    print($"Scroll output transfer could not be confirmed: {failure} Owned prepared output {outputId} was discarded to avoid duplicate output. Untransferred items may be lost; no refund or retry was created.", ConsoleColor.Yellow);
+                }
+                else
+                {
+                    print($"Scroll output transfer could not be confirmed: {failure} Prepared output could not be discarded because local network ownership was not confirmed. Check inventory/world quantities before reuse; no refund or retry was created.", ConsoleColor.Yellow);
                 }
             }
+            catch (Exception error)
+            {
+                print($"Scroll output transfer could not be confirmed: {failure} Discarding its prepared output also failed: {error.Message} Check inventory/world quantities before reuse; no refund or retry was created.", ConsoleColor.Yellow);
+            }
+            return false;
+        }
+        if (!string.IsNullOrEmpty(failure))
+            print($"Scroll output transfer reported a problem: {failure} Confirmed untransferred amount: {remaining}.", ConsoleColor.Yellow);
+
+        if (remaining == 0)
+        {
+            ZNetScene.instance.Destroy(itemDrop.gameObject);
+        }
+        else
+        {
+            prepared.m_stack = remaining;
+            itemDrop.Save();
+            itemDrop.gameObject.SetActive(true);
+        }
+        return true;
+    }
+
+    internal static long CountOutputTransferItems(IEnumerable<ItemDrop.ItemData> items, string name, int quality, int worldLevel)
+    {
+        long count = 0;
+        foreach (ItemDrop.ItemData item in items)
+        {
+            // Observe vanilla's stack identity; AddItem/ItemDataManager decides whether and how custom values merge.
+            // A valid TryStack can retain foreign metadata or produce a new value, so raw dictionary equality is not required.
+            if (item?.m_shared?.m_name != name || item.m_quality != quality || item.m_worldLevel != worldLevel)
+                continue;
+            if (item.m_stack < 0)
+                throw new InvalidOperationException("An output stack has an invalid count.");
+            count += item.m_stack;
+        }
+        return count;
+    }
+
+    internal static bool TryAddItemAndGetRemainder(int requested, Func<long> readCount, Func<bool> addItem,
+        out int remaining, out string failure)
+    {
+        remaining = 0;
+        failure = string.Empty;
+        try
+        {
+            long before = readCount();
+            if (requested <= 0 || before < 0)
+                throw new InvalidOperationException("The output amount or initial inventory count is invalid.");
+            bool added = false;
+            try
+            {
+                added = addItem();
+            }
+            catch (Exception error)
+            {
+                // Changed callbacks can throw after an add. Observe the inventory before deciding what remains.
+                failure = error.Message;
+            }
+            long after = readCount();
+            if (after < before || after - before > requested)
+                throw new InvalidOperationException("Inventory output counts changed by an unexpected amount.");
+            if (added && after - before != requested)
+                // A Changed callback can move successfully added output elsewhere. A net deficit is not proof of a world remainder.
+                throw new InvalidOperationException("AddItem reported success without the complete output remaining in the target inventory.");
+            remaining = requested - (int)(after - before);
+            if (!added && remaining != requested)
+                failure = string.IsNullOrEmpty(failure) ? "AddItem's result differs from the observed transfer." : failure;
+            return true;
+        }
+        catch (Exception error)
+        {
+            failure = error.Message;
+            return false;
         }
     }
 

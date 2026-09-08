@@ -5,6 +5,12 @@
     <LangVersion>latest</LangVersion>
     <AssemblyName>ValheimEnchantmentSystem.RuleTests</AssemblyName>
     <RootNamespace>ValheimEnchantmentSystem.RuleTests</RootNamespace>
+    <ValheimDir Condition="'$(ValheimDir)' == '' and '$(VALHEIM_DIR)' != ''">$(VALHEIM_DIR)</ValheimDir>
+    <ValheimDir Condition="'$(ValheimDir)' == '' and Exists('C:\Program Files (x86)\Steam\steamapps\common\Valheim')">C:\Program Files (x86)\Steam\steamapps\common\Valheim</ValheimDir>
+    <ValheimManagedDir Condition="'$(ValheimManagedDir)' == '' and '$(VALHEIM_MANAGED_DIR)' != ''">$(VALHEIM_MANAGED_DIR)</ValheimManagedDir>
+    <ValheimManagedDir Condition="'$(ValheimManagedDir)' == '' and '$(ValheimDir)' != ''">$(ValheimDir)\valheim_Data\Managed\publicized_assemblies</ValheimManagedDir>
+    <GameNetstandardDllPath Condition="'$(GameNetstandardDllPath)' == '' and Exists('$(ValheimManagedDir)\netstandard.dll')">$(ValheimManagedDir)\netstandard.dll</GameNetstandardDllPath>
+    <GameNetstandardDllPath Condition="'$(GameNetstandardDllPath)' == '' and Exists('$(ValheimManagedDir)\..\netstandard.dll')">$(ValheimManagedDir)\..\netstandard.dll</GameNetstandardDllPath>
   </PropertyGroup>
 
   <ItemGroup>
@@ -12,5 +18,14 @@
     <Reference Include="BepInEx">
       <HintPath>..\Libs\BepInEx.dll</HintPath>
     </Reference>
+    <Reference Include="assembly_valheim">
+      <HintPath>..\Libs\assembly_valheim.dll</HintPath>
+    </Reference>
+    <!-- Runtime facade required when loading game ItemData. Keep compilation on the net48 reference assemblies. -->
+    <None Include="$(GameNetstandardDllPath)" Link="netstandard.dll" CopyToOutputDirectory="PreserveNewest" Condition="'$(GameNetstandardDllPath)' != ''" />
   </ItemGroup>
+
+  <Target Name="ValidateGameTestFacade" BeforeTargets="PrepareForBuild">
+    <Error Condition="!Exists('$(GameNetstandardDllPath)')" Text="The ItemData regression fixture needs the game's Managed\netstandard.dll runtime facade. Set GameNetstandardDllPath, or configure ValheimDir / ValheimManagedDir as for the main project." />
+  </Target>
 </Project>

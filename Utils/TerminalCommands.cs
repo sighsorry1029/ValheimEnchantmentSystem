@@ -65,6 +65,7 @@ public static class TerminalCommands
                     en.Save();
                 }
 
+                EquippedEnchantmentSnapshotService.MarkDirty(Player.m_localPlayer);
                 Enchantment_VFX.UpdateGrid();
             });
         }

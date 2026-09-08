@@ -181,9 +181,6 @@ resourceMap:
 
     private const int MaxSkippedRecipeExamples = 10;
     private static bool Initialized;
-    private static bool RebuildQueued;
-    private static bool ForceQueuedRebuild;
-    private static string LastObjectDbSignature = string.Empty;
 
     private readonly struct AutomaticItemAssignment
     {
@@ -211,7 +208,7 @@ resourceMap:
             throw new InvalidOperationException($"Built-in resource map is invalid: {error}");
         }
 
-        BiomeTierResolver.TierMappingsChanged += () => ScheduleAuthoritativeRebuild(force: true);
+        BiomeTierResolver.TierMappingsChanged += () => EnchantmentRequirementRepository.ScheduleAuthoritativeRebuild(force: true);
         Initialized = true;
     }
 
@@ -395,69 +392,6 @@ resourceMap:
     private static bool IsValidScrollTier(char tier)
     {
         return "FEDCBAS".IndexOf(char.ToUpperInvariant(tier)) >= 0;
-    }
-
-    internal static bool ReloadAuthoritativeRequirements()
-    {
-        if (!IsAuthoritativeRuntime() || !IsObjectDbReady())
-        {
-            return false;
-        }
-
-        try
-        {
-            bool reloaded = EnchantmentRequirementRepository.TryReload(SyncedData.Synced_EnchantmentReqs);
-            if (reloaded)
-            {
-                LastObjectDbSignature = GetObjectDbSignature(ObjectDB.instance);
-            }
-
-            return reloaded;
-        }
-        catch (Exception ex)
-        {
-            Utils.print($"Failed to reload automatic enchantment requirements: {ex}", ConsoleColor.Red);
-            return false;
-        }
-    }
-
-    private static void ScheduleAuthoritativeRebuild(bool force = false)
-    {
-        ForceQueuedRebuild |= force;
-        if (RebuildQueued || ValheimEnchantmentSystem._thistype == null)
-        {
-            return;
-        }
-
-        RebuildQueued = true;
-        ValheimEnchantmentSystem._thistype.DelayedInvoke(() =>
-        {
-            RebuildQueued = false;
-            bool forceRebuild = ForceQueuedRebuild;
-            ForceQueuedRebuild = false;
-            if (!IsAuthoritativeRuntime() || !IsObjectDbReady())
-            {
-                return;
-            }
-
-            try
-            {
-                string signature = GetObjectDbSignature(ObjectDB.instance);
-                if (!forceRebuild && string.Equals(signature, LastObjectDbSignature, StringComparison.Ordinal))
-                {
-                    return;
-                }
-
-                if (EnchantmentRequirementRepository.TryReload(SyncedData.Synced_EnchantmentReqs))
-                {
-                    LastObjectDbSignature = signature;
-                }
-            }
-            catch (Exception ex)
-            {
-                Utils.print($"Failed to rebuild automatic enchantment requirements: {ex}", ConsoleColor.Red);
-            }
-        }, 1);
     }
 
     private static bool TryReadResourceMap(out ResourceMapDocument document, out string error)
@@ -766,40 +700,7 @@ resourceMap:
         return ObjectDB.instance != null && ObjectDB.instance.m_items != null && ObjectDB.instance.m_recipes != null;
     }
 
-    private static bool IsAuthoritativeRuntime()
-    {
-        return ZNet.instance != null && ZNet.instance.IsServer();
-    }
-
-    private static string GetObjectDbSignature(ObjectDB objectDb)
-    {
-        unchecked
-        {
-            int hash = 17;
-            hash = hash * 31 + objectDb.GetInstanceID();
-            hash = hash * 31 + (objectDb.m_items?.Count ?? 0);
-            hash = hash * 31 + (objectDb.m_recipes?.Count ?? 0);
-            foreach (Recipe recipe in objectDb.m_recipes ?? new List<Recipe>())
-            {
-                if (recipe == null)
-                {
-                    continue;
-                }
-
-                hash = hash * 31 + recipe.GetInstanceID();
-                hash = hash * 31 + (recipe.m_enabled ? 1 : 0);
-                hash = hash * 31 + (recipe.m_item?.GetInstanceID() ?? 0);
-                foreach (Piece.Requirement requirement in recipe.m_resources ?? Array.Empty<Piece.Requirement>())
-                {
-                    hash = hash * 31 + (requirement?.m_resItem?.GetInstanceID() ?? 0);
-                    hash = hash * 31 + (requirement?.m_amount ?? 0);
-                }
-            }
-
-            return hash.ToString();
-        }
-    }
-
+    // Keep these hooks under this root so its initialization failure still blocks them in PatchRegistry.
     [HarmonyPatch(typeof(ObjectDB), nameof(ObjectDB.Awake))]
     private static class ObjectDB_Awake_Patch
     {
@@ -807,7 +708,7 @@ resourceMap:
         [HarmonyPriority(Priority.Last)]
         private static void Postfix()
         {
-            ScheduleAuthoritativeRebuild();
+            EnchantmentRequirementRepository.ScheduleAuthoritativeRebuild();
         }
     }
 
@@ -818,7 +719,7 @@ resourceMap:
         [HarmonyPriority(Priority.Last)]
         private static void Postfix()
         {
-            ScheduleAuthoritativeRebuild();
+            EnchantmentRequirementRepository.ScheduleAuthoritativeRebuild();
         }
     }
 
@@ -829,7 +730,7 @@ resourceMap:
         [HarmonyPriority(Priority.Last)]
         private static void Postfix()
         {
-            ScheduleAuthoritativeRebuild();
+            EnchantmentRequirementRepository.ScheduleAuthoritativeRebuild();
         }
     }
 
@@ -840,7 +741,7 @@ resourceMap:
         [HarmonyPriority(Priority.Last)]
         private static void Postfix()
         {
-            ScheduleAuthoritativeRebuild();
+            EnchantmentRequirementRepository.ScheduleAuthoritativeRebuild();
         }
     }
 }

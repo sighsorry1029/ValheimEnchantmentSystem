@@ -12,9 +12,8 @@ public static class Notifications_UI
     private static ConfigEntry<string> _successWebhooks = null!;
     private static ConfigEntry<string> _failureWebhooks = null!;
     private static ConfigEntry<int> _webhookMinLevel = null!;
-    private static ConfigEntry<int> _notificationMinLevel = null!;
-    private const float FadeDuration = 0.25f;
-
+    private const float NotificationRequestCooldown = 0.35f;
+    private static readonly Dictionary<long, float> _requestCooldownUntil = new();
 
     private class Notification
     {
@@ -26,6 +25,8 @@ public static class Notifications_UI
     }
 
     private static readonly Queue<Notification> _notifications = new();
+    private static ConfigEntry<int> _notificationMinLevel = null!;
+    private const float FadeDuration = 0.25f;
 
     private static bool IsVisible() => UI && UI.activeSelf;
 
@@ -49,8 +50,6 @@ public static class Notifications_UI
 
     public static bool HasFlagFast(this Filter value, Filter flag) => (value & flag) == flag;
     public static ConfigEntry<Filter> _filterConfig;
-    private const float NotificationRequestCooldown = 0.35f;
-    private static readonly Dictionary<long, float> _requestCooldownUntil = new();
 
     internal static void Initialize()
     {
@@ -153,8 +152,13 @@ public static class Notifications_UI
 
     internal static void ResetTransientState()
     {
+        ResetClientState();
+        ResetServerState();
+    }
+
+    private static void ResetClientState()
+    {
         _notifications.Clear();
-        _requestCooldownUntil.Clear();
         _dequeueTimer = 1f;
         Hide();
     }
@@ -266,6 +270,11 @@ public static class Notifications_UI
         return true;
     }
 
+    private static void ResetServerState()
+    {
+        _requestCooldownUntil.Clear();
+    }
+
     private static bool IsAllowedByCooldown(long sender)
     {
         float now = Time.time;
@@ -332,7 +341,7 @@ public static class Notifications_UI
         [UsedImplicitly]
         private static void Postfix(ZNetScene __instance)
         {
-            ResetTransientState();
+            ResetClientState();
             ZRoutedRpc.instance.Register("kg_Enchantment_GlobalNotification",
                 (long sender, string playerName, string itemPrefab, int type, int prevLevel, int level) =>
                 {
@@ -357,7 +366,7 @@ public static class Notifications_UI
         [UsedImplicitly]
         private static void Postfix(ZNetScene __instance)
         {
-            ResetTransientState();
+            ResetServerState();
             ZRoutedRpc.instance.Register("kg_Enchantment_GlobalNotification_Request",
                 (long sender, string itemPrefab, int type, int prevLevel, int level) =>
                 {

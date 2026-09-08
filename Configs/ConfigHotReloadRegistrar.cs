@@ -70,7 +70,7 @@ internal static class ConfigHotReloadRegistrar
             "reqs",
             new[] { EnchantmentConfigPaths.RequirementsYaml, EnchantmentConfigPaths.ResourceMapYaml },
             new[] { EnchantmentConfigPaths.AdditionalRequirementsDirectory },
-            ReloadRequirementDomain,
+            EnchantmentRequirementRepository.ReloadAuthoritativeRequirements,
             IsServerRuntime,
             pollDebounceSeconds: YamlPollDebounceSeconds));
     }
@@ -205,11 +205,6 @@ internal static class ConfigHotReloadRegistrar
             "requirement" => "reqs",
             _ => target.Trim().ToLowerInvariant()
         };
-    }
-
-    private static bool ReloadRequirementDomain()
-    {
-        return ResourceMapRequirementResolver.ReloadAuthoritativeRequirements();
     }
 
     private static bool IsServerRuntime()

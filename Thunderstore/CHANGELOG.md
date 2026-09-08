@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.9.15
+
+- Fixed stale equipped-enchantment stat snapshots after chest-supplied enchantments and enchantment commands
+- Hardened scroll combining with verified material consumption and output counts, including partial inventory merges and foreign item metadata; uncertain operations stop without automatic refunds or retries, and discarding unverified output can lose items
+- Fixed foreign item-data removal calling the wrong method and animation-speed handlers skipping additional priority groups
+- Simplified equipment VFX patch state, notification lifecycle resets, and requirements rebuild ownership while preserving configuration keys, save formats, public API signatures, and RPC names
+- Added regression coverage for partial consumption, output transfer failures, metadata handling, and reflection-based item-data removal
+- Added opt-in Debug deployment with DeployToGame=true, copying only the final merged plugin DLL after successful post-processing
+
+## 1.9.14
+
+- Simplified the packaged README and cleaned up obsolete project content references
+- Refresh equipped-enchantment stat snapshots after enchantment level changes, including chest-supplied attempts and enchantment commands
+- Verify scroll-combine removals and inventory output transfers; stop on uncertain mutations and preserve confirmed untransferred output instead of trusting inventory return values alone
+- Simplified per-call equipment VFX patch state and separated notification client/server resets without changing RPC names or configuration keys
+- Consolidated requirements rebuild state and shared identical YAML file enumeration while preserving per-domain loading policies
+- Fixed foreign item-data removal dispatch and processing of multiple animation-speed priority groups
+
 ## 1.9.13
 
 - Added optional AzuCraftyBoxes support for normal and blessed enchantment scrolls in nearby standard containers, using inventory scrolls first and respecting pulling, range, access, item filters, and Leave One Item settings; special drawers and backpack/gem-bag sources are excluded

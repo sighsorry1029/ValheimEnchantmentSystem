@@ -1,53 +1,9 @@
-# Standalone Mod Patches
+# Patch layout
 
-This directory contains standalone BepInEx plugins that fix Settings UI conflicts with other mods.
+This directory contains no C# patch implementations. It is not a standalone plugin project and produces no ArcaneWard or Blueprint patch DLLs or mirrored configuration files.
 
-## 📦 Patches Included
+Valheim Enchantment System compiles its mod source into the main `kg.ValheimEnchantmentSystem` assembly. `Startup/PatchRegistry.cs` discovers the attributed Harmony patch classes alongside their owning features. The item data, localization, skill, and piece managers also register Harmony patches directly during static initialization.
 
-### 1. **ArcaneWardPatch.cs**
-- **Purpose**: Prevents ArcaneWard mod from using Valheim's Settings UI (which causes crashes)
-- **Function**:
-  - Disables ArcaneWard's Settings tab integration
-  - Mirrors all ArcaneWard settings to its own config file
-  - Keeps settings synchronized in both directions
+Optional mod integrations live in `Integrations/`. The ArcaneWard and Blueprint soft dependency declarations in the main plugin do not implement the standalone Settings UI patches previously described here.
 
-### 2. **BlueprintPatch.cs**
-- **Purpose**: Prevents Blueprint mod from using Valheim's Settings UI (which causes crashes)
-- **Function**:
-  - Disables Blueprint's Settings tab integration
-  - Mirrors all Blueprint settings to its own config file
-  - Keeps settings synchronized in both directions
-
-## 🚀 How It Works
-
-These patches run as **separate BepInEx plugins** that:
-
-1. **Auto-detect** if ArcaneWard or Blueprint mods are installed
-2. **Remove** their Settings UI patches that cause `SettingsBase` errors
-3. **Create** mirrored configs in their own config files
-4. **Sync** changes bidirectionally between the original mod and the patch
-
-## 📝 Config Files Generated
-
-When active, these patches create:
-
-- `BepInEx/config/kg.ArcaneWardPatch.cfg` - All ArcaneWard settings
-- `BepInEx/config/kg.BlueprintPatch.cfg` - All Blueprint settings
-
-Use **BepInEx Configuration Manager** (F1) to edit these settings.
-
-## ✅ Benefits
-
-- ✅ No more `SettingsBase` crashes
-- ✅ Settings still fully functional via BepInEx Config Manager
-- ✅ Automatic bidirectional sync
-- ✅ Works as standalone patches (can be distributed separately)
-- ✅ Soft dependencies - won't error if target mods aren't installed
-
-## 🔧 Usage
-
-These patches are automatically compiled as part of the main mod. They run independently and will only activate if the target mods are present.
-
-## 📜 License
-
-Part of the Valheim Enchantment System mod.
+See [BUILDING.md](../BUILDING.md) for the build and packaging procedure.

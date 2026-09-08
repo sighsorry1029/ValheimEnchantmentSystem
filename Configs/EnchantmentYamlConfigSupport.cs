@@ -67,7 +67,7 @@ internal static class EnchantmentYamlConfigSupport
         return true;
     }
 
-    private static bool TryGetYamlFiles(string directory, out string[] files, out string error)
+    internal static bool TryGetYamlFiles(string directory, out string[] files, out string error)
     {
         files = Array.Empty<string>();
 

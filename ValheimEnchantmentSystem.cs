@@ -19,7 +19,7 @@ namespace kg.ValheimEnchantmentSystem
     {
         private const string GUID = "kg.ValheimEnchantmentSystem";
         private const string PLUGIN_NAME = "ValheimEnchantmentSystem";
-        public const string ModVersion = "1.9.13";
+        public const string ModVersion = "1.9.15";
         private const string GeneralConfigSection = "General";
         private const string ClientConfigSection = "Client";
         private static readonly string ConfigFileName = GUID + ".cfg";

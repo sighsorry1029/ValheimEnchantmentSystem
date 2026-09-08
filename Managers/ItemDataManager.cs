@@ -870,7 +870,7 @@ public class ForeignItemInfo : IEnumerable<object>
 
 	public Dictionary<string, T> GetAll<T>() where T : class => call(nameof(GetAll), Array.Empty<object?>(), Array.Empty<Type?>(), typeof(T)) as T as Dictionary<string, T> ?? new Dictionary<string, T>();
 
-	public bool Remove(string key = "") => call(nameof(Add), new object[] { key }, new[] { typeof(string) }) as bool? ?? false;
+	public bool Remove(string key = "") => call(nameof(Remove), new object[] { key }, new[] { typeof(string) }) as bool? ?? false;
 
 	public bool Remove<T>(string key = "") where T : class => call(nameof(Remove), new object[] { key }, new[] { typeof(string) }, typeof(T)) as bool? ?? false;
 

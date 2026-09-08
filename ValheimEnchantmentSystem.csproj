@@ -18,6 +18,7 @@
         <ValheimDir Condition="'$(ValheimDir)' == '' and Exists('C:\Program Files (x86)\Steam\steamapps\common\Valheim')">C:\Program Files (x86)\Steam\steamapps\common\Valheim</ValheimDir>
         <ValheimManagedDir Condition="'$(ValheimManagedDir)' == '' and '$(VALHEIM_MANAGED_DIR)' != ''">$(VALHEIM_MANAGED_DIR)</ValheimManagedDir>
         <ValheimManagedDir Condition="'$(ValheimManagedDir)' == '' and '$(ValheimDir)' != ''">$(ValheimDir)\valheim_Data\Managed\publicized_assemblies</ValheimManagedDir>
+        <GamePluginDir Condition="'$(GamePluginDir)' == '' and '$(ValheimDir)' != ''">$(ValheimDir)\BepInEx\plugins</GamePluginDir>
         <ServerSyncDllPath Condition="'$(ServerSyncDllPath)' == '' and Exists('$(ProjectDir)Libs\ServerSync.dll')">$(ProjectDir)Libs\ServerSync.dll</ServerSyncDllPath>
         <ServerSyncDllPath Condition="'$(ServerSyncDllPath)' == '' and '$(VALHEIM_SERVER_SYNC_DLL)' != '' and Exists('$(VALHEIM_SERVER_SYNC_DLL)')">$(VALHEIM_SERVER_SYNC_DLL)</ServerSyncDllPath>
         <ServerSyncDllPath Condition="'$(ServerSyncDllPath)' == '' and '$(ValheimDir)' != '' and Exists('$(ValheimDir)\BepInEx\plugins\ServerSync.dll')">$(ValheimDir)\BepInEx\plugins\ServerSync.dll</ServerSyncDllPath>
@@ -68,33 +69,6 @@
       <EmbeddedResource Include="Resources\kg_enchantment" />
     </ItemGroup>
     <ItemGroup>
-      <Content Include="GithubReadme\app.js" />
-      <Content Include="GithubReadme\EnchantmentScrolls.md" />
-      <Content Include="GithubReadme\InstallationAndConfigs.md" />
-      <Content Include="GithubReadme\ItemEnchantment.md" />
-      <Content Include="GithubReadme\Localization.md" />
-      <Content Include="GithubReadme\MainInfo.md" />
-      <Content Include="GithubReadme\node use.bat" />
-      <Content Include="GithubReadme\parsed\Banker.md" />
-      <Content Include="GithubReadme\parsed\Buffer.md" />
-      <Content Include="GithubReadme\parsed\Dialogues.md" />
-      <Content Include="GithubReadme\parsed\Gambler.md" />
-      <Content Include="GithubReadme\parsed\InstallationAndConfigs.md" />
-      <Content Include="GithubReadme\parsed\Leaderboard.md" />
-      <Content Include="GithubReadme\parsed\Localization.md" />
-      <Content Include="GithubReadme\parsed\Lootboxes.md" />
-      <Content Include="GithubReadme\parsed\MainInfo.md" />
-      <Content Include="GithubReadme\parsed\Marketplace.md" />
-      <Content Include="GithubReadme\parsed\NPC.md" />
-      <Content Include="GithubReadme\parsed\Patchnotes.md" />
-      <Content Include="GithubReadme\parsed\Quests.md" />
-      <Content Include="GithubReadme\parsed\QuestsEvents.md" /> 
-      <Content Include="GithubReadme\parsed\ServerInfo.md" />
-      <Content Include="GithubReadme\parsed\Teleporter.md" />
-      <Content Include="GithubReadme\parsed\TerritorySystem.md" />
-      <Content Include="GithubReadme\parsed\Trader.md" />
-      <Content Include="GithubReadme\parsed\Transmog.md" />
-      <Content Include="GithubReadme\Patchnotes.md" />
       <EmbeddedResource Include="translations\kg.ValheimEnchantmentSystem.Korean.yml">
         <LogicalName>translations.Korean.yml</LogicalName>
       </EmbeddedResource>
@@ -208,7 +182,7 @@
     <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets"/>
 
     <Target Name="PostBuildArtifacts" AfterTargets="ILRepacker">
-        <!-- Auto-copy to game folders disabled - copy manually when needed -->
+        <!-- Debug plugin deployment runs after this target when DeployToGame=true. -->
         <!-- <Exec Command="copy /Y &quot;$(TargetDir)$(AssemblyName).dll&quot; &quot;C:\Program Files (x86)\Steam\steamapps\common\Valheim\BepInEx\plugins\$(AssemblyName).dll&quot;" /> -->
         <!-- <Exec Command="copy /Y &quot;$(TargetDir)$(AssemblyName).dll&quot; &quot;C:\Program Files (x86)\Steam\steamapps\common\Valheim Dedicated Server\BepInEx\plugins\$(AssemblyName).dll&quot;" /> -->
         <Exec Command="pdb2mdb.exe &quot;$(TargetDir)$(AssemblyName).dll&quot;" />
@@ -218,7 +192,15 @@
         <Exec Condition="'$(Configuration)' == 'Release'"
               Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\scripts\Package-Release.ps1&quot; -ProjectDir &quot;$(MSBuildProjectDirectory)&quot; -DllPath &quot;$(TargetPath)&quot; -IntermediateDirectory &quot;$(IntermediateOutputPath)Package&quot;" />
     </Target>
-    
+
+    <Target Name="DeployDebugToGame" AfterTargets="PostBuildArtifacts"
+            Condition="'$(Configuration)' == 'Debug' and '$(DeployToGame)' == 'true'">
+        <Error Condition="'$(GamePluginDir)' == ''" Text="Set ValheimDir or GamePluginDir to deploy the Debug plugin." />
+        <MakeDir Directories="$(GamePluginDir)" />
+        <Copy SourceFiles="$(TargetPath)" DestinationFiles="$(GamePluginDir)\$(TargetFileName)" />
+        <Message Importance="high" Text="Deployed final Debug plugin: $(GamePluginDir)\$(TargetFileName)" />
+    </Target>
+
     <Target Name="CopyToDedicatedServer">
         <Exec Command="copy &quot;$(TargetDir)kg.ValheimEnchantmentSystem.dll&quot; &quot;C:\Program Files (x86)\Steam\steamapps\common\Valheim Dedicated Server\BepInEx\plugins\&quot;" />
     </Target>

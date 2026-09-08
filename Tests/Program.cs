@@ -8,6 +8,7 @@ using kg.ValheimEnchantmentSystem.Configs;
 using kg.ValheimEnchantmentSystem.Integrations;
 using kg.ValheimEnchantmentSystem.Items_Structures;
 using kg.ValheimEnchantmentSystem.UI;
+using Utils = kg.ValheimEnchantmentSystem.Utils;
 
 namespace ValheimEnchantmentSystem.RuleTests;
 
@@ -41,15 +42,119 @@ internal static class Program
         TestEnchantmentKeyboardShortcut();
         TestEnchantmentGamepadShortcutState();
         TestEnchantmentMaterialRules();
+        TestScrollCombineConsumption();
+        TestScrollOutputTransfer();
+        OutputTransferRegressionTests.Run(True);
+        InteropRegressionTests.Run(True);
 
         if (_failures == 0)
         {
-            Console.WriteLine("All enchantment rule tests passed.");
+            System.Console.WriteLine("All enchantment rule tests passed.");
             return 0;
         }
 
-        Console.Error.WriteLine($"{_failures} enchantment rule test(s) failed.");
+        System.Console.Error.WriteLine($"{_failures} enchantment rule test(s) failed.");
         return 1;
+    }
+
+    private static void TestScrollCombineConsumption()
+    {
+        foreach (int size in new[] { 3, 5 })
+        {
+            int[] stacks = Enumerable.Repeat(4, size).ToArray();
+            int calls = 0;
+            True(ScrollCombineService.TryConsumeStacks(3, () => stacks.ToArray(), () => stacks.Sum(value => (long)value),
+                index => { ++calls; stacks[index] -= 3; return true; }, out _), $"{size}-part pattern consumes all requested stacks");
+            Equal(size, calls, "normal combining removes each source once");
+            True(stacks.All(stack => stack == 1), "normal combining preserves each source remainder");
+        }
+
+        int[] missing = { 3, 0, 3 };
+        int missingCalls = 0;
+        False(ScrollCombineService.TryConsumeStacks(3, () => missing.ToArray(), () => missing.Sum(value => (long)value),
+            _ => { ++missingCalls; return true; }, out _), "missing source fails preflight");
+        Equal(0, missingCalls, "preflight failure consumes no sources");
+
+        int[] failed = { 3, 3, 3 };
+        int failedCalls = 0;
+        False(ScrollCombineService.TryConsumeStacks(3, () => failed.ToArray(), () => failed.Sum(value => (long)value),
+            index => { ++failedCalls; if (index == 1) return false; failed[index] = 0; return true; }, out _),
+            "failed second removal prevents output");
+        Equal(2, failedCalls, "failed removal stops without retrying later sources");
+        Equal(0, failed[0], "confirmed earlier removal is not blindly refunded");
+        Equal(3, failed[2], "later source remains untouched after failure");
+
+        int[] partial = { 3, 3, 3 };
+        int partialCalls = 0;
+        False(ScrollCombineService.TryConsumeStacks(3, () => partial.ToArray(), () => partial.Sum(value => (long)value),
+            index => { ++partialCalls; --partial[index]; return true; }, out _),
+            "true return with partial removal does not grant output");
+        Equal(1, partialCalls, "partial removal stops before the next source");
+
+        int[] moved = { 3, 3, 3 };
+        long movedTotal = 9;
+        False(ScrollCombineService.TryConsumeStacks(3, () => moved.ToArray(), () => movedTotal,
+            index => { moved[index] = 0; return true; }, out _),
+            "moving a source into a different stack is not consumption");
+
+        int[] callbackChanged = { 3, 3, 3 };
+        False(ScrollCombineService.TryConsumeStacks(3, () => callbackChanged.ToArray(), () => callbackChanged.Sum(value => (long)value),
+            index => { callbackChanged[index] = 0; callbackChanged[2] = 2; return true; }, out _),
+            "callback changes to another pattern source prevent output");
+
+        int[] threw = { 3, 3, 3 };
+        int throwCalls = 0;
+        False(ScrollCombineService.TryConsumeStacks(3, () => threw.ToArray(), () => threw.Sum(value => (long)value),
+            index => { ++throwCalls; threw[index] = 0; throw new InvalidOperationException("callback failed after removal"); }, out _),
+            "exception after mutation does not mint output or refund");
+        Equal(1, throwCalls, "uncertain removal never retries");
+    }
+
+    private static void TestScrollOutputTransfer()
+    {
+        long count = 20;
+        True(Utils.TryAddItemAndGetRemainder(5, () => count, () => { count += 5; return true; }, out int remaining, out _),
+            "full transfer is observed");
+        Equal(0, remaining, "full transfer has no world remainder");
+
+        True(Utils.TryAddItemAndGetRemainder(5, () => count, () => false, out remaining, out _),
+            "rejected add with no mutation is known");
+        Equal(5, remaining, "rejected add retains the entire world output");
+
+        True(Utils.TryAddItemAndGetRemainder(5, () => count, () => { count += 2; return false; }, out remaining, out _),
+            "partial merge followed by false is observed");
+        Equal(3, remaining, "only the untransferred amount remains in the world");
+
+        True(Utils.TryAddItemAndGetRemainder(5, () => count, () => { count += 5; return false; }, out remaining, out _),
+            "false after a complete transfer does not recreate output");
+        Equal(0, remaining, "observed full transfer overrides a misleading false return");
+
+        False(Utils.TryAddItemAndGetRemainder(5, () => count, () => true, out _, out _),
+            "success followed by a callback moving all output elsewhere must not create a world duplicate");
+        False(Utils.TryAddItemAndGetRemainder(5, () => count, () => { count += 2; return true; }, out _, out _),
+            "success with only part of the output remaining is uncertain and must not recreate moved output");
+
+        True(Utils.TryAddItemAndGetRemainder(5, () => count,
+            () => { count += 2; throw new InvalidOperationException("changed callback failed"); }, out remaining, out _),
+            "an exception after a confirmed partial add preserves the remainder");
+        Equal(3, remaining, "exception handling uses observed inventory increase");
+
+        False(Utils.TryAddItemAndGetRemainder(5, () => count, () => { count += 6; return true; }, out _, out _),
+            "unexpected extra inventory output is not assigned a guessed remainder");
+        False(Utils.TryAddItemAndGetRemainder(5, () => count, () => { --count; return false; }, out _, out _),
+            "inventory decrease during add is uncertain");
+
+        int reads = 0;
+        int adds = 0;
+        False(Utils.TryAddItemAndGetRemainder(5,
+            () => ++reads == 1 ? count : throw new InvalidOperationException("observation failed"),
+            () => { ++adds; return true; }, out _, out _), "failed post-add observation rejects an unverified remainder");
+        Equal(1, adds, "failed post-add observation does not retry the addition");
+
+        adds = 0;
+        False(Utils.TryAddItemAndGetRemainder(0, () => count, () => { ++adds; return true; }, out _, out _),
+            "zero output is rejected before insertion");
+        Equal(0, adds, "invalid output performs no insertion");
     }
 
     private static void TestEnchantmentMaterialRules()
@@ -1125,6 +1230,6 @@ resourceMap:
     private static void Fail(string name, string detail)
     {
         _failures++;
-        Console.Error.WriteLine($"FAIL: {name}: {detail}");
+        System.Console.Error.WriteLine($"FAIL: {name}: {detail}");
     }
 }

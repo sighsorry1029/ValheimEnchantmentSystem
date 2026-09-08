@@ -189,6 +189,11 @@ public static class EnchantmentService
         enchantment.Save();
         result.CurrentLevel = enchantment.level;
         result.LevelChanged = result.CurrentLevel != result.PreviousLevel;
+        if (result.LevelChanged)
+        {
+            // Chest materials do not raise a change event for the player's inventory.
+            EquippedEnchantmentSnapshotService.MarkDirty(player);
+        }
     }
 
     private static string BuildMessage(EnchantmentOutcome outcome, string itemName, int previousLevel, int currentLevel)
@@ -358,6 +363,7 @@ public static class EnchantmentSideEffects
             return;
         }
 
+        EquippedEnchantmentSnapshotService.MarkDirty(Player.m_localPlayer);
         Enchantment_VFX.UpdateGrid();
 
         if (refreshEquipment && ValheimEnchantmentSystem._thistype != null && enchantment.Item != null)

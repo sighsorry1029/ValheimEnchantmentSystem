@@ -8,6 +8,9 @@ internal static class EnchantmentRequirementRepository
     private static readonly Dictionary<string, SyncedData.EnchantmentReqs> OptimizedRequirements = new(StringComparer.Ordinal);
     private static List<SyncedData.EnchantmentReqs>? CachedRequirements;
     private static bool IsInitialized;
+    private static bool RebuildQueued;
+    private static bool ForceQueuedRebuild;
+    private static string LastObjectDbSignature = string.Empty;
 
     public static void Initialize(CustomSyncedValue<List<SyncedData.EnchantmentReqs>> target)
     {
@@ -50,6 +53,108 @@ internal static class EnchantmentRequirementRepository
 
         target.Value = result;
         return true;
+    }
+
+    internal static bool ReloadAuthoritativeRequirements()
+    {
+        if (!IsAuthoritativeRuntime() || !IsObjectDbReady())
+        {
+            return false;
+        }
+
+        try
+        {
+            bool reloaded = TryReload(SyncedData.Synced_EnchantmentReqs);
+            if (reloaded)
+            {
+                LastObjectDbSignature = GetObjectDbSignature(ObjectDB.instance);
+            }
+
+            return reloaded;
+        }
+        catch (Exception ex)
+        {
+            Utils.print($"Failed to reload automatic enchantment requirements: {ex}", ConsoleColor.Red);
+            return false;
+        }
+    }
+
+    internal static void ScheduleAuthoritativeRebuild(bool force = false)
+    {
+        ForceQueuedRebuild |= force;
+        if (RebuildQueued || ValheimEnchantmentSystem._thistype == null)
+        {
+            return;
+        }
+
+        RebuildQueued = true;
+        ValheimEnchantmentSystem._thistype.DelayedInvoke(() =>
+        {
+            RebuildQueued = false;
+            bool forceRebuild = ForceQueuedRebuild;
+            ForceQueuedRebuild = false;
+            if (!IsAuthoritativeRuntime() || !IsObjectDbReady())
+            {
+                return;
+            }
+
+            try
+            {
+                string signature = GetObjectDbSignature(ObjectDB.instance);
+                if (!forceRebuild && string.Equals(signature, LastObjectDbSignature, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                if (TryReload(SyncedData.Synced_EnchantmentReqs))
+                {
+                    LastObjectDbSignature = signature;
+                }
+            }
+            catch (Exception ex)
+            {
+                Utils.print($"Failed to rebuild automatic enchantment requirements: {ex}", ConsoleColor.Red);
+            }
+        }, 1);
+    }
+
+    private static bool IsObjectDbReady()
+    {
+        return ObjectDB.instance != null && ObjectDB.instance.m_items != null && ObjectDB.instance.m_recipes != null;
+    }
+
+    private static bool IsAuthoritativeRuntime()
+    {
+        return ZNet.instance != null && ZNet.instance.IsServer();
+    }
+
+    private static string GetObjectDbSignature(ObjectDB objectDb)
+    {
+        unchecked
+        {
+            int hash = 17;
+            hash = hash * 31 + objectDb.GetInstanceID();
+            hash = hash * 31 + (objectDb.m_items?.Count ?? 0);
+            hash = hash * 31 + (objectDb.m_recipes?.Count ?? 0);
+            foreach (Recipe recipe in objectDb.m_recipes ?? new List<Recipe>())
+            {
+                if (recipe == null)
+                {
+                    continue;
+                }
+
+                hash = hash * 31 + recipe.GetInstanceID();
+                hash = hash * 31 + (recipe.m_enabled ? 1 : 0);
+                hash = hash * 31 + (recipe.m_item?.GetInstanceID() ?? 0);
+                foreach (Piece.Requirement requirement in recipe.m_resources ?? Array.Empty<Piece.Requirement>())
+                {
+                    hash = hash * 31 + (requirement?.m_resItem?.GetInstanceID() ?? 0);
+                    hash = hash * 31 + (requirement?.m_amount ?? 0);
+                }
+            }
+
+            return hash.ToString();
+        }
     }
 
     public static SyncedData.EnchantmentReqs GetReqs(List<SyncedData.EnchantmentReqs> requirements, string prefab)
@@ -124,7 +229,7 @@ internal static class EnchantmentRequirementRepository
             warnings.Add($"Skipped enchantment requirements file: {mainError}");
         }
 
-        if (!TryGetYamlFiles(EnchantmentConfigPaths.AdditionalRequirementsDirectory, out string[] files, out string fileError))
+        if (!EnchantmentYamlConfigSupport.TryGetYamlFiles(EnchantmentConfigPaths.AdditionalRequirementsDirectory, out string[] files, out string fileError))
         {
             warnings.Add($"Skipped enchantment requirements directory: {fileError}");
         }
@@ -249,31 +354,6 @@ internal static class EnchantmentRequirementRepository
         catch (Exception ex)
         {
             error = ex.ToString();
-            return false;
-        }
-    }
-
-    private static bool TryGetYamlFiles(string directory, out string[] files, out string error)
-    {
-        files = Array.Empty<string>();
-
-        if (!Directory.Exists(directory))
-        {
-            error = $"{directory}: directory does not exist";
-            return false;
-        }
-
-        try
-        {
-            files = Directory.GetFiles(directory, "*.yml", SearchOption.TopDirectoryOnly)
-                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-            error = string.Empty;
-            return true;
-        }
-        catch (Exception ex)
-        {
-            error = $"{directory}: {ex}";
             return false;
         }
     }

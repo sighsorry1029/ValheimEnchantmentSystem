@@ -255,21 +255,16 @@ internal static class EquipmentWorldVfx
     [ClientOnlyPatch]
     private static class VisEquipment_SetLeftHandEquipped_Patch
     {
-        private static readonly HashSet<int> PendingInstances = new();
-
         [UsedImplicitly]
-        private static void Prefix(VisEquipment __instance, int hash)
+        private static void Prefix(VisEquipment __instance, int hash, out bool __state)
         {
-            if (__instance.m_currentLeftItemHash != hash)
-            {
-                PendingInstances.Add(__instance.GetInstanceID());
-            }
+            __state = __instance.m_currentLeftItemHash != hash;
         }
 
         [UsedImplicitly]
-        private static void Postfix(VisEquipment __instance)
+        private static void Postfix(VisEquipment __instance, bool __state)
         {
-            if (!PendingInstances.Remove(__instance.GetInstanceID()) || !__instance.m_nview || __instance.m_nview.m_zdo == null)
+            if (!__state || !__instance.m_nview || __instance.m_nview.m_zdo == null)
             {
                 return;
             }
@@ -282,21 +277,16 @@ internal static class EquipmentWorldVfx
     [ClientOnlyPatch]
     private static class VisEquipment_SetRightHandEquipped_Patch
     {
-        private static readonly HashSet<int> PendingInstances = new();
-
         [UsedImplicitly]
-        private static void Prefix(VisEquipment __instance, int hash)
+        private static void Prefix(VisEquipment __instance, int hash, out bool __state)
         {
-            if (__instance.m_currentRightItemHash != hash)
-            {
-                PendingInstances.Add(__instance.GetInstanceID());
-            }
+            __state = __instance.m_currentRightItemHash != hash;
         }
 
         [UsedImplicitly]
-        private static void Postfix(VisEquipment __instance)
+        private static void Postfix(VisEquipment __instance, bool __state)
         {
-            if (!PendingInstances.Remove(__instance.GetInstanceID()) || !__instance.m_nview || __instance.m_nview.m_zdo == null)
+            if (!__state || !__instance.m_nview || __instance.m_nview.m_zdo == null)
             {
                 return;
             }
@@ -309,21 +299,16 @@ internal static class EquipmentWorldVfx
     [ClientOnlyPatch]
     private static class VisEquipment_SetBackEquipped_Patch
     {
-        private static readonly HashSet<int> PendingInstances = new();
-
         [UsedImplicitly]
-        private static void Prefix(VisEquipment __instance, int leftItem, int rightItem, int leftVariant)
+        private static void Prefix(VisEquipment __instance, int leftItem, int rightItem, int leftVariant, out bool __state)
         {
-            if (__instance.m_currentLeftBackItemHash != leftItem || __instance.m_currentRightBackItemHash != rightItem)
-            {
-                PendingInstances.Add(__instance.GetInstanceID());
-            }
+            __state = __instance.m_currentLeftBackItemHash != leftItem || __instance.m_currentRightBackItemHash != rightItem;
         }
 
         [UsedImplicitly]
-        private static void Postfix(VisEquipment __instance)
+        private static void Postfix(VisEquipment __instance, bool __state)
         {
-            if (!PendingInstances.Remove(__instance.GetInstanceID()) || !__instance.m_nview || __instance.m_nview.m_zdo == null)
+            if (!__state || !__instance.m_nview || __instance.m_nview.m_zdo == null)
             {
                 return;
             }
@@ -336,21 +321,16 @@ internal static class EquipmentWorldVfx
     [ClientOnlyPatch]
     private static class VisEquipment_SetChestEquipped_Patch
     {
-        private static readonly HashSet<int> PendingInstances = new();
-
         [UsedImplicitly]
-        private static void Prefix(VisEquipment __instance, int hash)
+        private static void Prefix(VisEquipment __instance, int hash, out bool __state)
         {
-            if (__instance.m_currentChestItemHash != hash && Enchantment_VFX.IsArmorVfxEnabled())
-            {
-                PendingInstances.Add(__instance.GetInstanceID());
-            }
+            __state = __instance.m_currentChestItemHash != hash && Enchantment_VFX.IsArmorVfxEnabled();
         }
 
         [UsedImplicitly]
-        private static void Postfix(VisEquipment __instance)
+        private static void Postfix(VisEquipment __instance, bool __state)
         {
-            if (!PendingInstances.Remove(__instance.GetInstanceID()) || !__instance.m_nview || __instance.m_nview.m_zdo == null)
+            if (!__state || !__instance.m_nview || __instance.m_nview.m_zdo == null)
             {
                 return;
             }
@@ -363,21 +343,16 @@ internal static class EquipmentWorldVfx
     [ClientOnlyPatch]
     private static class VisEquipment_SetLegEquipped_Patch
     {
-        private static readonly HashSet<int> PendingInstances = new();
-
         [UsedImplicitly]
-        private static void Prefix(VisEquipment __instance, int hash)
+        private static void Prefix(VisEquipment __instance, int hash, out bool __state)
         {
-            if (__instance.m_currentLegItemHash != hash && Enchantment_VFX.IsArmorVfxEnabled())
-            {
-                PendingInstances.Add(__instance.GetInstanceID());
-            }
+            __state = __instance.m_currentLegItemHash != hash && Enchantment_VFX.IsArmorVfxEnabled();
         }
 
         [UsedImplicitly]
-        private static void Postfix(VisEquipment __instance)
+        private static void Postfix(VisEquipment __instance, bool __state)
         {
-            if (!PendingInstances.Remove(__instance.GetInstanceID()) || !__instance.m_nview || __instance.m_nview.m_zdo == null)
+            if (!__state || !__instance.m_nview || __instance.m_nview.m_zdo == null)
             {
                 return;
             }
@@ -390,21 +365,16 @@ internal static class EquipmentWorldVfx
     [ClientOnlyPatch]
     private static class VisEquipment_SetShoulderEquipped_Patch
     {
-        private static readonly HashSet<int> PendingInstances = new();
-
         [UsedImplicitly]
-        private static void Prefix(VisEquipment __instance, int hash)
+        private static void Prefix(VisEquipment __instance, int hash, out bool __state)
         {
-            if (__instance.m_currentShoulderItemHash != hash && Enchantment_VFX.IsArmorVfxEnabled())
-            {
-                PendingInstances.Add(__instance.GetInstanceID());
-            }
+            __state = __instance.m_currentShoulderItemHash != hash && Enchantment_VFX.IsArmorVfxEnabled();
         }
 
         [UsedImplicitly]
-        private static void Postfix(VisEquipment __instance)
+        private static void Postfix(VisEquipment __instance, bool __state)
         {
-            if (!PendingInstances.Remove(__instance.GetInstanceID()) || !__instance.m_nview || __instance.m_nview.m_zdo == null)
+            if (!__state || !__instance.m_nview || __instance.m_nview.m_zdo == null)
             {
                 return;
             }
@@ -417,21 +387,16 @@ internal static class EquipmentWorldVfx
     [ClientOnlyPatch]
     private static class VisEquipment_SetHelmetEquipped_Patch
     {
-        private static readonly HashSet<int> PendingInstances = new();
-
         [UsedImplicitly]
-        private static void Prefix(VisEquipment __instance, int hash)
+        private static void Prefix(VisEquipment __instance, int hash, out bool __state)
         {
-            if (__instance.m_currentHelmetItemHash != hash && Enchantment_VFX.IsArmorVfxEnabled())
-            {
-                PendingInstances.Add(__instance.GetInstanceID());
-            }
+            __state = __instance.m_currentHelmetItemHash != hash && Enchantment_VFX.IsArmorVfxEnabled();
         }
 
         [UsedImplicitly]
-        private static void Postfix(VisEquipment __instance)
+        private static void Postfix(VisEquipment __instance, bool __state)
         {
-            if (!PendingInstances.Remove(__instance.GetInstanceID()) || !__instance.m_nview || __instance.m_nview.m_zdo == null)
+            if (!__state || !__instance.m_nview || __instance.m_nview.m_zdo == null)
             {
                 return;
             }
