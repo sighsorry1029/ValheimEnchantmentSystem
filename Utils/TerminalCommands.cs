@@ -12,12 +12,12 @@ public static class TerminalCommands
         Utils.print(message);
         if (Chat.instance)
         {
-            Chat.instance.m_hideTimer = 0f;
+            Chat.instance.VES_m_hideTimer() = 0f;
             Chat.instance.AddString(message);
         }
     }
 
-    [HarmonyPatch(typeof(Terminal), nameof(Terminal.InitTerminal))]
+    [HarmonyPatch(typeof(Terminal), "InitTerminal")]
     private static class Terminal_InitTerminal_ConfigReload_Patch
     {
         [UsedImplicitly]
@@ -33,7 +33,7 @@ public static class TerminalCommands
         }
     }
 
-    [HarmonyPatch(typeof(Terminal),nameof(Terminal.InitTerminal))]
+    [HarmonyPatch(typeof(Terminal),"InitTerminal")]
     [ClientOnlyPatch]
     private static class Terminal_InitTerminal_Patch
     {
@@ -58,7 +58,7 @@ public static class TerminalCommands
                 if(!Utils.IsDebug_Strict) return;
                 int level = int.Parse(args[1]);
 
-                foreach (ItemDrop.ItemData item in Player.m_localPlayer.m_inventory.m_inventory.Where(x => SyncedData.GetReqs(x.m_dropPrefab?.name) != null))
+                foreach (ItemDrop.ItemData item in Player.m_localPlayer.GetInventory().GetAllItems().Where(x => SyncedData.GetReqs(x.m_dropPrefab?.name) != null))
                 {
                     Enchantment_Core.Enchanted en = item.Data().GetOrCreate<Enchantment_Core.Enchanted>();
                     en.level = level;

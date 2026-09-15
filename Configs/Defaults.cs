@@ -124,7 +124,11 @@ public static class Defaults
         },
         ["(S)Armor"] = new()
         {
-            "HelmetFishingHat"
+            "HelmetFishingHat",
+            // Foundry outputs without equipment recipes for automatic resource-map assignment.
+            "ArmorDeepNorthHeavyChest",
+            "ArmorDeepNorthHeavylegs",
+            "HelmetDNHeavy"
         },
         ["(A)Weapon"] = new()
         {

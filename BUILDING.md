@@ -3,7 +3,7 @@
 ## Prerequisites
 
 1. .NET SDK installed (`dotnet --version`).
-2. Game publicized assemblies available.
+2. Original Valheim 1.0.7 Managed assemblies available (including Unity and the netstandard facade).
 3. Dependency binaries resolvable (`ServerSync.dll`, `YamlDotNet.dll`).
 
 ## Configure Valheim managed assemblies path
@@ -13,7 +13,7 @@ Set one of the following before build:
 - `VALHEIM_DIR`
   - Example: `C:\Program Files (x86)\Steam\steamapps\common\Valheim`
 - `VALHEIM_MANAGED_DIR`
-  - Example: `C:\Program Files (x86)\Steam\steamapps\common\Valheim\valheim_Data\Managed\publicized_assemblies`
+  - Example: `C:\Program Files (x86)\Steam\steamapps\common\Valheim\valheim_Data\Managed`
 
 `VALHEIM_MANAGED_DIR` has priority when both are set.
 
@@ -59,7 +59,7 @@ dotnet build ValheimEnchantmentSystem.csproj -c Debug -p:DeployToGame=true
 
 Debug deployment copies only the final merged plugin DLL to `$(ValheimDir)\BepInEx\plugins` after successful post-processing. Use `-p:DeployToGame=false` to skip copying or `-p:GamePluginDir="path\to\plugins"` to override the destination. Verify the source and destination DLL SHA-256 hashes after deployment.
 
-Run a Release build only when a release is explicitly requested. It creates the versioned Thunderstore archive in `Thunderstore/` and the Nexus archive in `artifacts/`. Before building, check the release manager's project name, watched ZIP folder, team, target sites, and Hexium installation scope: a newly generated ZIP in a registered folder can upload automatically.
+Run a Release build only when a release is explicitly requested. It creates the versioned Thunderstore archive in `Thunderstore/` and the Nexus archive in `artifacts/`. Existing release-manager settings control automatic uploads; ordinary builds do not require uploader checks.
 
 Run the deterministic enchantment rule checks after changing chance, skill bonus, or failure behavior:
 
@@ -82,6 +82,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Set-Version.ps1 -C
 
 ## Notes
 
-- The project fails early with a clear error if Valheim publicized assemblies are missing.
+- The project fails early with a clear error if Valheim original managed assemblies are missing.
 - The project fails early if `ServerSync.dll` or `YamlDotNet.dll` cannot be resolved.
 - The Thunderstore archive contains the DLL, root README, `Thunderstore/CHANGELOG.md`, manifest, icon, and English localization. The Nexus archive contains only the DLL.
+
+Valheim 1.0.7 static contract and runtime check scope: [Tests/Valheim107.md](Tests/Valheim107.md). Pinned ServerSync provenance: [Libs/ServerSync.provenance.md](Libs/ServerSync.provenance.md).

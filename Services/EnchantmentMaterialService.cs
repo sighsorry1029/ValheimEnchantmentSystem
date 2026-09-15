@@ -77,11 +77,11 @@ internal static class EnchantmentMaterialService
 
     private static bool IsUsable(Container? container)
     {
-        if (container == null || container.m_nview == null || !container.m_nview.IsValid() ||
+        if (container == null || container.VES_m_nview() == null || !container.VES_m_nview().IsValid() ||
             container.GetInventory() == null || container.GetComponent<TombStone>() != null) return false;
-        bool inUse = container.IsInUse() || container.m_nview.GetZDO().GetBool(ZDOVars.s_inUse);
-        return !inUse || (container.m_nview.IsOwner() && InventoryGui.instance != null &&
-                         InventoryGui.instance.m_currentContainer == container);
+        bool inUse = container.IsInUse() || container.VES_m_nview().GetZDO().GetBool(ZDOVars.s_inUse);
+        return !inUse || (container.VES_m_nview().IsOwner() && InventoryGui.instance != null &&
+                         InventoryGui.instance.VES_m_currentContainer() == container);
     }
 
     private static int Count(Inventory? inventory, string prefab)

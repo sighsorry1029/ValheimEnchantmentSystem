@@ -21,11 +21,19 @@ internal static class EnchantmentDomainHelper
 
     public static string ResolveItemPrefabName(ItemDrop.ItemData item)
     {
-        if (item?.m_dropPrefab)
+        if (item == null) return null;
+        if (item.m_dropPrefab)
         {
             return item.m_dropPrefab.name;
         }
 
-        return Utils.GetPrefabNameByItemName(item?.m_shared?.m_name);
+        if (item.m_shared == null) return null;
+        ObjectDB database = ObjectDB.instance;
+        if (!database) return null;
+
+        // Recipe templates can have no drop prefab. The game's shared-data index
+        // preserves their identity and avoids scanning ObjectDB on every UI frame.
+        GameObject prefab = database.GetItemPrefab(item.m_shared);
+        return prefab ? prefab.name : Utils.GetPrefabNameByItemName(item.m_shared.m_name);
     }
 }

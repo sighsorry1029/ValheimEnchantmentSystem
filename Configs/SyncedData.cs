@@ -29,7 +29,7 @@ public static class SyncedData
         EnchantmentRequirementRepository.LoadAuthoritativeData(Synced_EnchantmentReqs);
     }
 
-    [HarmonyPatch(typeof(ZNet), nameof(ZNet.Awake))]
+    [HarmonyPatch(typeof(ZNet), "Awake")]
     private static class ZNet_Awake_Patch
     {
         [UsedImplicitly]

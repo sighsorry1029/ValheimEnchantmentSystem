@@ -14,7 +14,7 @@ public static class ScrollItems
         EngineEvents.InventoryChanged += inventory => ScrollCombineService.RequestRefresh(inventory);
     }
 
-    [HarmonyPatch(typeof(InventoryGrid), nameof(InventoryGrid.Awake))]
+    [HarmonyPatch(typeof(InventoryGrid), nameof(InventoryGrid.OnEnable))]
     [ClientOnlyPatch]
     public static class InventoryGrid_Awake_Patch
     {
@@ -36,7 +36,7 @@ public static class ScrollItems
         }
     }
 
-    [HarmonyPatch(typeof(InventoryGrid), nameof(InventoryGrid.UpdateGui))]
+    [HarmonyPatch(typeof(InventoryGrid), "UpdateGui")]
     [ClientOnlyPatch]
     private static class InventoryGrid_UpdateGui_Patch
     {
@@ -47,9 +47,9 @@ public static class ScrollItems
         }
     }
 
-    [HarmonyPatch(typeof(InventoryGrid), nameof(InventoryGrid.OnRightClick))]
+    [HarmonyPatch(typeof(InventoryGrid), "OnRightDown")]
     [ClientOnlyPatch]
-    private static class InventoryGrid_OnRightClick_Patch
+    private static class InventoryGrid_OnRightDown_Patch
     {
         [UsedImplicitly]
         private static void Postfix(InventoryGrid __instance, UIInputHandler element)
@@ -58,7 +58,7 @@ public static class ScrollItems
         }
     }
 
-    [HarmonyPatch(typeof(ItemDrop.ItemData), nameof(ItemDrop.ItemData.GetTooltip), typeof(ItemDrop.ItemData), typeof(int), typeof(bool), typeof(float), typeof(int))]
+    [HarmonyPatch(typeof(ItemDrop.ItemData), nameof(ItemDrop.ItemData.GetTooltip), typeof(ItemDrop.ItemData), typeof(int), typeof(bool), typeof(float), typeof(int), typeof(bool))]
     [ClientOnlyPatch]
     public static class TooltipPatch
     {

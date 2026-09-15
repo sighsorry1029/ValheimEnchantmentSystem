@@ -178,7 +178,7 @@ public static class EnchantmentService
             if (player != null)
             {
                 player.UnequipItem(enchantment.Item);
-                player.m_inventory.RemoveItem(enchantment.Item);
+                player.GetInventory().RemoveItem(enchantment.Item);
             }
 
             result.CurrentLevel = result.PreviousLevel;

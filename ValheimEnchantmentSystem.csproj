@@ -17,7 +17,7 @@
         <ValheimDir Condition="'$(ValheimDir)' == '' and '$(VALHEIM_DIR)' != ''">$(VALHEIM_DIR)</ValheimDir>
         <ValheimDir Condition="'$(ValheimDir)' == '' and Exists('C:\Program Files (x86)\Steam\steamapps\common\Valheim')">C:\Program Files (x86)\Steam\steamapps\common\Valheim</ValheimDir>
         <ValheimManagedDir Condition="'$(ValheimManagedDir)' == '' and '$(VALHEIM_MANAGED_DIR)' != ''">$(VALHEIM_MANAGED_DIR)</ValheimManagedDir>
-        <ValheimManagedDir Condition="'$(ValheimManagedDir)' == '' and '$(ValheimDir)' != ''">$(ValheimDir)\valheim_Data\Managed\publicized_assemblies</ValheimManagedDir>
+        <ValheimManagedDir Condition="'$(ValheimManagedDir)' == '' and '$(ValheimDir)' != ''">$(ValheimDir)\valheim_Data\Managed</ValheimManagedDir>
         <GamePluginDir Condition="'$(GamePluginDir)' == '' and '$(ValheimDir)' != ''">$(ValheimDir)\BepInEx\plugins</GamePluginDir>
         <ServerSyncDllPath Condition="'$(ServerSyncDllPath)' == '' and Exists('$(ProjectDir)Libs\ServerSync.dll')">$(ProjectDir)Libs\ServerSync.dll</ServerSyncDllPath>
         <ServerSyncDllPath Condition="'$(ServerSyncDllPath)' == '' and '$(VALHEIM_SERVER_SYNC_DLL)' != '' and Exists('$(VALHEIM_SERVER_SYNC_DLL)')">$(VALHEIM_SERVER_SYNC_DLL)</ServerSyncDllPath>
@@ -87,31 +87,31 @@
         <HintPath>Libs\0Harmony.dll</HintPath>
       </Reference>
       <Reference Include="Assembly-CSharp">
-        <HintPath>$(ValheimManagedDir)\Assembly-CSharp_publicized.dll</HintPath>
+        <HintPath>$(ValheimManagedDir)\Assembly-CSharp.dll</HintPath>
       </Reference>
       <Reference Include="assembly_googleanalytics">
-        <HintPath>$(ValheimManagedDir)\assembly_googleanalytics_publicized.dll</HintPath>
+        <HintPath>$(ValheimManagedDir)\assembly_googleanalytics.dll</HintPath>
       </Reference>
       <Reference Include="assembly_guiutils">
-        <HintPath>Libs\assembly_guiutils.dll</HintPath>
+        <HintPath>$(ValheimManagedDir)\assembly_guiutils.dll</HintPath>
       </Reference>
       <Reference Include="assembly_lux">
-        <HintPath>$(ValheimManagedDir)\assembly_lux_publicized.dll</HintPath>
+        <HintPath>$(ValheimManagedDir)\assembly_lux.dll</HintPath>
       </Reference>
       <Reference Include="assembly_postprocessing">
-        <HintPath>$(ValheimManagedDir)\assembly_postprocessing_publicized.dll</HintPath>
+        <HintPath>$(ValheimManagedDir)\assembly_postprocessing.dll</HintPath>
       </Reference>
       <Reference Include="assembly_simplemeshcombine">
-        <HintPath>$(ValheimManagedDir)\assembly_simplemeshcombine_publicized.dll</HintPath>
+        <HintPath>$(ValheimManagedDir)\assembly_simplemeshcombine.dll</HintPath>
       </Reference>
       <Reference Include="assembly_sunshafts">
-        <HintPath>$(ValheimManagedDir)\assembly_sunshafts_publicized.dll</HintPath>
+        <HintPath>$(ValheimManagedDir)\assembly_sunshafts.dll</HintPath>
       </Reference>
       <Reference Include="assembly_utils">
-        <HintPath>Libs\assembly_utils.dll</HintPath>
+        <HintPath>$(ValheimManagedDir)\assembly_utils.dll</HintPath>
       </Reference>
       <Reference Include="assembly_valheim">
-        <HintPath>Libs\assembly_valheim.dll</HintPath>
+        <HintPath>$(ValheimManagedDir)\assembly_valheim.dll</HintPath>
       </Reference>
       <Reference Include="BepInEx">
         <HintPath>Libs\BepInEx.dll</HintPath>
@@ -127,53 +127,54 @@
         <HintPath>Libs\JewelcraftingAPI.dll</HintPath>
       </Reference>
       <Reference Include="SoftReferenceableAssets">
-        <HintPath>$(ValheimManagedDir)\SoftReferenceableAssets_publicized.dll</HintPath>
+        <HintPath>$(ValheimManagedDir)\SoftReferenceableAssets.dll</HintPath>
       </Reference>
       <Reference Include="System" />
+      <Reference Include="netstandard">
+        <HintPath>$(ValheimManagedDir)\netstandard.dll</HintPath>
+        <Private>False</Private>
+      </Reference>
       <Reference Include="Unity.TextMeshPro">
-        <HintPath>Libs\Unity.TextMeshPro.dll</HintPath>
+        <HintPath>$(ValheimManagedDir)\Unity.TextMeshPro.dll</HintPath>
       </Reference>
       <Reference Include="UnityEngine">
-        <HintPath>Libs\UnityEngine.dll</HintPath>
+        <HintPath>$(ValheimManagedDir)\UnityEngine.dll</HintPath>
       </Reference>
       <Reference Include="UnityEngine.AnimationModule">
-        <HintPath>Libs\UnityEngine.AnimationModule.dll</HintPath>
+        <HintPath>$(ValheimManagedDir)\UnityEngine.AnimationModule.dll</HintPath>
       </Reference>
       <Reference Include="UnityEngine.AssetBundleModule">
-        <HintPath>Libs\UnityEngine.AssetBundleModule.dll</HintPath>
+        <HintPath>$(ValheimManagedDir)\UnityEngine.AssetBundleModule.dll</HintPath>
       </Reference>
       <Reference Include="UnityEngine.AudioModule">
-        <HintPath>Libs\UnityEngine.AudioModule.dll</HintPath>
+        <HintPath>$(ValheimManagedDir)\UnityEngine.AudioModule.dll</HintPath>
       </Reference>
       <Reference Include="UnityEngine.CoreModule">
-        <HintPath>Libs\UnityEngine.CoreModule.dll</HintPath>
+        <HintPath>$(ValheimManagedDir)\UnityEngine.CoreModule.dll</HintPath>
       </Reference>
       <Reference Include="UnityEngine.ImageConversionModule">
-        <HintPath>Libs\UnityEngine.ImageConversionModule.dll</HintPath>
+        <HintPath>$(ValheimManagedDir)\UnityEngine.ImageConversionModule.dll</HintPath>
       </Reference>
       <Reference Include="UnityEngine.IMGUIModule">
-        <HintPath>Libs\UnityEngine.IMGUIModule.dll</HintPath>
+        <HintPath>$(ValheimManagedDir)\UnityEngine.IMGUIModule.dll</HintPath>
       </Reference>
       <Reference Include="UnityEngine.InputLegacyModule">
-        <HintPath>Libs\UnityEngine.InputLegacyModule.dll</HintPath>
+        <HintPath>$(ValheimManagedDir)\UnityEngine.InputLegacyModule.dll</HintPath>
       </Reference>
       <Reference Include="UnityEngine.ParticleSystemModule">
-        <HintPath>Libs\UnityEngine.ParticleSystemModule.dll</HintPath>
+        <HintPath>$(ValheimManagedDir)\UnityEngine.ParticleSystemModule.dll</HintPath>
       </Reference>
       <Reference Include="UnityEngine.PhysicsModule">
-        <HintPath>Libs\UnityEngine.PhysicsModule.dll</HintPath>
+        <HintPath>$(ValheimManagedDir)\UnityEngine.PhysicsModule.dll</HintPath>
       </Reference>
       <Reference Include="UnityEngine.UI">
-        <HintPath>Libs\UnityEngine.UI.dll</HintPath>
+        <HintPath>$(ValheimManagedDir)\UnityEngine.UI.dll</HintPath>
       </Reference>
       <Reference Include="UnityEngine.UIElementsModule">
-        <HintPath>Libs\UnityEngine.UIElementsModule.dll</HintPath>
-      </Reference>
-      <Reference Include="UnityEngine.UIElementsNativeModule">
-        <HintPath>Libs\UnityEngine.UIElementsNativeModule.dll</HintPath>
+        <HintPath>$(ValheimManagedDir)\UnityEngine.UIElementsModule.dll</HintPath>
       </Reference>
       <Reference Include="UnityEngine.UIModule">
-        <HintPath>Libs\UnityEngine.UIModule.dll</HintPath>
+        <HintPath>$(ValheimManagedDir)\UnityEngine.UIModule.dll</HintPath>
       </Reference>
       <Reference Include="YamlDotNet, Version=16.0.0.0, Culture=neutral, PublicKeyToken=ec19458f3c15af5e, processorArchitecture=MSIL">
         <HintPath>$(YamlDotNetDllPath)</HintPath>
@@ -208,7 +209,7 @@
     <Import Project="packages\ILRepack.Lib.MSBuild.Task.2.0.44.1\build\ILRepack.Lib.MSBuild.Task.targets" Condition="Exists('packages\ILRepack.Lib.MSBuild.Task.2.0.44.1\build\ILRepack.Lib.MSBuild.Task.targets')" />
 
     <Target Name="ValidateBuildEnvironment">
-      <Error Condition="!Exists('$(ValheimManagedDir)\Assembly-CSharp_publicized.dll')" Text="Valheim publicized assemblies were not found. Set ValheimDir or ValheimManagedDir (or environment variables VALHEIM_DIR / VALHEIM_MANAGED_DIR) and retry." />
+      <Error Condition="!Exists('$(ValheimManagedDir)\Assembly-CSharp.dll')" Text="Valheim original managed assemblies were not found. Set ValheimDir or ValheimManagedDir (or environment variables VALHEIM_DIR / VALHEIM_MANAGED_DIR) and retry." />
       <Error Condition="!Exists('$(ServerSyncDllPath)')" Text="Missing required dependency: ServerSync.dll. Provide Libs\ServerSync.dll, set VALHEIM_SERVER_SYNC_DLL, or install it to $(ValheimDir)\BepInEx\plugins\ServerSync.dll." />
       <Error Condition="!Exists('$(YamlDotNetDllPath)')" Text="Missing required dependency: YamlDotNet.dll. Restore NuGet packages, provide Libs\YamlDotNet.dll, or set VALHEIM_YAMLDOTNET_DLL." />
     </Target>

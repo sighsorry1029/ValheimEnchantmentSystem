@@ -60,15 +60,15 @@ internal static class InventoryOverlayVfx
         return scrollRect.viewport ? scrollRect.viewport : scrollRect.GetComponent<RectTransform>();
     }
 
-    private static bool IsGridElementVisible(InventoryGrid.Element element, RectTransform? viewport)
+    private static bool IsGridElementVisible(InventoryElement element, RectTransform? viewport)
     {
-        if (viewport == null || element.m_go == null)
+        if (viewport == null || element.gameObject == null)
         {
             return true;
         }
 
-        RectTransform elementRect = element.m_go.GetComponent<RectTransform>();
-        if (!elementRect || !element.m_go.activeInHierarchy)
+        RectTransform elementRect = element.gameObject.GetComponent<RectTransform>();
+        if (!elementRect || !element.gameObject.activeInHierarchy)
         {
             return false;
         }
@@ -126,23 +126,23 @@ internal static class InventoryOverlayVfx
 
     private static void ApplyInventoryGridVisuals(InventoryGrid grid, bool updateContent)
     {
-        if (!grid || grid.m_inventory == null || grid.m_elements == null)
+        if (!grid || grid.GetInventory() == null || grid.VES_m_elements() == null)
         {
             return;
         }
 
         RectTransform? viewport = GetInventoryViewport(grid);
-        int width = grid.m_inventory.GetWidth();
-        int height = grid.m_inventory.GetHeight();
+        int width = grid.GetInventory().GetWidth();
+        int height = grid.GetInventory().GetHeight();
 
-        foreach (InventoryGrid.Element element in grid.m_elements)
+        foreach (InventoryElement element in grid.VES_m_elements())
         {
-            if (element?.m_go == null)
+            if (element?.gameObject == null)
             {
                 continue;
             }
 
-            Transform overlay = element.m_go.transform.Find("VES_Level");
+            Transform overlay = element.gameObject.transform.Find("VES_Level");
             if (overlay == null)
             {
                 continue;
@@ -159,7 +159,7 @@ internal static class InventoryOverlayVfx
             return;
         }
 
-        foreach (ItemDrop.ItemData itemData in grid.m_inventory.GetAllItems())
+        foreach (ItemDrop.ItemData itemData in grid.GetInventory().GetAllItems())
         {
             if (itemData == null ||
                 itemData.m_gridPos.x < 0 ||
@@ -171,18 +171,18 @@ internal static class InventoryOverlayVfx
             }
 
             long elementIndex = (long)itemData.m_gridPos.y * width + itemData.m_gridPos.x;
-            if (elementIndex < 0 || elementIndex >= grid.m_elements.Count)
+            if (elementIndex < 0 || elementIndex >= grid.VES_m_elements().Count)
             {
                 continue;
             }
 
-            InventoryGrid.Element element = grid.m_elements[(int)elementIndex];
-            if (element?.m_go == null)
+            InventoryElement element = grid.VES_m_elements()[(int)elementIndex];
+            if (element?.gameObject == null)
             {
                 continue;
             }
 
-            Transform overlay = element.m_go.transform.Find("VES_Level");
+            Transform overlay = element.gameObject.transform.Find("VES_Level");
             if (overlay == null)
             {
                 continue;
@@ -222,7 +222,7 @@ internal static class InventoryOverlayVfx
 
     private static void OnInventoryChanged(Inventory inventory)
     {
-        if (inventory != Player.m_localPlayer?.m_inventory)
+        if (inventory != Player.m_localPlayer?.GetInventory())
         {
             return;
         }
@@ -267,7 +267,7 @@ internal static class InventoryOverlayVfx
         tmp.outlineWidth = 0.15f;
     }
 
-    [HarmonyPatch(typeof(InventoryGrid), nameof(InventoryGrid.Awake))]
+    [HarmonyPatch(typeof(InventoryGrid), nameof(InventoryGrid.OnEnable))]
     [ClientOnlyPatch]
     private static class InventoryGrid_Awake_Patch
     {
@@ -279,7 +279,7 @@ internal static class InventoryOverlayVfx
         }
     }
 
-    [HarmonyPatch(typeof(Hud), nameof(Hud.Awake))]
+    [HarmonyPatch(typeof(Hud), "Awake")]
     [ClientOnlyPatch]
     private static class Hud_Awake_Patch
     {
@@ -298,7 +298,7 @@ internal static class InventoryOverlayVfx
         }
     }
 
-    [HarmonyPatch(typeof(HotkeyBar), nameof(HotkeyBar.UpdateIcons))]
+    [HarmonyPatch(typeof(HotkeyBar), "UpdateIcons")]
     [ClientOnlyPatch]
     private static class HotkeyBar_UpdateIcons_Patch
     {
@@ -322,15 +322,18 @@ internal static class InventoryOverlayVfx
                 return;
             }
 
-            foreach (HotkeyBar.ElementData element in __instance.m_elements.Where(element => !element.m_used))
+            IList elements = __instance.GetHotkeyElements();
+            for (int i = 0; i < elements.Count; ++i)
             {
-                element.m_go.transform.Find("VES_Level").gameObject.SetActive(false);
+                object element = elements[i];
+                if (!GameAccess.IsHotkeyElementUsed(element))
+                    GameAccess.GetHotkeyElementObject(element).transform.Find("VES_Level").gameObject.SetActive(false);
             }
 
-            foreach (ItemDrop.ItemData itemData in __instance.m_items)
+            foreach (ItemDrop.ItemData itemData in __instance.VES_m_items())
             {
-                HotkeyBar.ElementData element = __instance.m_elements[itemData.m_gridPos.x];
-                Transform overlay = element.m_go.transform.Find("VES_Level");
+                object element = elements[itemData.m_gridPos.x];
+                Transform overlay = GameAccess.GetHotkeyElementObject(element).transform.Find("VES_Level");
                 Enchantment_Core.Enchanted en = itemData.Data().Get<Enchantment_Core.Enchanted>();
                 if (en && en.level > 0)
                 {
@@ -349,7 +352,7 @@ internal static class InventoryOverlayVfx
         }
     }
 
-    [HarmonyPatch(typeof(InventoryGrid), nameof(InventoryGrid.UpdateGui))]
+    [HarmonyPatch(typeof(InventoryGrid), "UpdateGui")]
     [ClientOnlyPatch]
     private static class InventoryGrid_UpdateGui_Patch
     {

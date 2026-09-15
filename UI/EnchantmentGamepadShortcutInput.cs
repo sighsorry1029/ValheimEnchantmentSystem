@@ -68,7 +68,7 @@ internal static class EnchantmentGamepadShortcutInput
             {
                 ConsumedButton button = Consumed[i];
                 ZInput.ButtonDef? definition = input.GetButtonDef(button.Name);
-                if (definition?.m_heldDynamic == true)
+                if (definition?.VES_m_heldDynamic() == true)
                 {
                     if (button.ReleasedFrame >= 0) Consumed.RemoveAt(i);
                 }
@@ -81,17 +81,17 @@ internal static class EnchantmentGamepadShortcutInput
             ZInput.ButtonDef? modifier = string.IsNullOrEmpty(_modifier) ? null : input.GetButtonDef(_modifier);
             // Held includes context-specific Pressed fallbacks until Tick runs. Press/Release update
             // both raw held fields together; sampling one avoids phantom edges between fixed/dynamic ticks.
-            bool pressed = PressState.Observe(main?.m_heldDynamic == true, modifier?.m_heldDynamic == true,
+            bool pressed = PressState.Observe(main?.VES_m_heldDynamic() == true, modifier?.VES_m_heldDynamic() == true,
                 !string.IsNullOrEmpty(_modifier));
             // Observe first so a blocked press cannot fire later when a dialog loses focus.
             if (!pressed || !ZInput.IsGamepadEnabled() ||
-                !ZInput.ShouldAcceptInputFromSource(ZInput.InputSource.Gamepad) || !VES_UI.CanHandleShortcut()) return;
+                !GameAccess.ShouldAcceptInputFromSource(ZInput.InputSource.Gamepad) || !VES_UI.CanHandleShortcut()) return;
 
             Consume(main!);
             if (modifier != null) Consume(modifier);
             _pending = true;
             _pendingFrame = Time.frameCount;
-            UIGamePad.m_lastInteractFrame = Time.frameCount;
+            GameAccess.SetLastInteractFrame(Time.frameCount);
         }
         finally
         {
@@ -101,8 +101,8 @@ internal static class EnchantmentGamepadShortcutInput
 
     private static bool HasPendingEdges(ZInput.ButtonDef? button)
     {
-        return button != null && (button.m_wasPressedDynamic || button.m_pressedDynamic || button.m_releasedDynamic ||
-                                  button.m_wasPressedFixed || button.m_pressedFixed || button.m_releasedFixed);
+        return button != null && (button.VES_m_wasPressedDynamic() || button.VES_m_pressedDynamic() || button.VES_m_releasedDynamic() ||
+                                  button.VES_m_wasPressedFixed() || button.VES_m_pressedFixed() || button.VES_m_releasedFixed());
     }
 
     private static void Consume(ZInput.ButtonDef button)
@@ -124,7 +124,7 @@ internal static class EnchantmentGamepadShortcutInput
         return false;
     }
 
-    [HarmonyPatch(typeof(ZInput), nameof(ZInput.TryGetButtonState))]
+    [HarmonyPatch(typeof(ZInput), "TryGetButtonState")]
     [ClientOnlyPatch]
     private static class ZInput_TryGetButtonState_Patch
     {

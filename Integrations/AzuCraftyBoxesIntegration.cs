@@ -66,9 +66,9 @@ internal sealed class AzuCraftyBoxesIntegration : IOptionalIntegration
 
             foreach (Container container in SnapshotRegisteredContainers())
             {
-                if (!container || !container.gameObject.activeInHierarchy || !container.m_nview ||
-                    !container.m_nview.IsValid() || container.GetInventory() == null ||
-                    container.m_nview.GetZDO().GetLong("creator".GetStableHashCode(), 0L) == 0L ||
+                if (!container || !container.gameObject.activeInHierarchy || !container.VES_m_nview() ||
+                    !container.VES_m_nview().IsValid() || container.GetInventory() == null ||
+                    container.VES_m_nview().GetZDO().GetLong("creator".GetStableHashCode(), 0L) == 0L ||
                     container.GetComponent<TombStone>() || container.GetComponentInParent<Player>() ||
                     (container.m_wagon && container.m_wagon.InUse()) ||
                     (container.IsInUse() && !container.IsOwner()))

@@ -87,7 +87,7 @@ internal sealed class EnchantmentPanelDrag : MonoBehaviour, IBeginDragHandler, I
     public void OnBeginDrag(PointerEventData eventData)
     {
         if (!_initialized || eventData.button != PointerEventData.InputButton.Left ||
-            _blocksInput() || (InventoryGui.instance && InventoryGui.instance.m_dragGo)) return;
+            _blocksInput() || (InventoryGui.instance && InventoryGui.instance.VES_m_dragGo())) return;
 
         if (_configDirty) ReadConfiguration();
         Canvas.ForceUpdateCanvases();

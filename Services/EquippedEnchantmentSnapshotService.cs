@@ -39,7 +39,7 @@ internal static class EquippedEnchantmentSnapshotService
         public CacheEntry(Player player)
         {
             PlayerRef = new WeakReference<Player>(player);
-            Inventory = player.m_inventory;
+            Inventory = player.GetInventory();
         }
     }
 
@@ -75,7 +75,7 @@ internal static class EquippedEnchantmentSnapshotService
 
     internal static Snapshot GetSnapshot(Player? player)
     {
-        if (player == null || !player || player.m_inventory == null)
+        if (player == null || !player || player.GetInventory() == null)
         {
             return EmptySnapshot;
         }
@@ -164,11 +164,11 @@ internal static class EquippedEnchantmentSnapshotService
         {
             entry = new CacheEntry(player);
             EntriesByPlayerId[playerId] = entry;
-            BindInventory(playerId, player.m_inventory);
+            BindInventory(playerId, player.GetInventory());
             return entry;
         }
 
-        Inventory? currentInventory = player.m_inventory;
+        Inventory? currentInventory = player.GetInventory();
         if (!ReferenceEquals(entry.Inventory, currentInventory))
         {
             UnbindInventory(playerId, entry.Inventory);
@@ -184,7 +184,7 @@ internal static class EquippedEnchantmentSnapshotService
     {
         Snapshot snapshot = entry.Snapshot;
         snapshot.Reset();
-        foreach (ItemDrop.ItemData item in player.m_inventory.GetEquippedItems())
+        foreach (ItemDrop.ItemData item in player.GetInventory().GetEquippedItems())
         {
             if (item?.Data().Get<Enchantment_Core.Enchanted>() is not { level: > 0 } enchantment)
             {

@@ -38,8 +38,8 @@ internal static class EnchantmentShortcutInput
         InventoryGui? inventory = InventoryGui.instance;
         if (inventory != null)
         {
-            if (inventory.m_craftTimer >= 0f) return "Crafting";
-            if (IsVisible(inventory.m_splitPanel)) return "InventorySplitDialog";
+            if (inventory.VES_m_craftTimer() >= 0f) return "Crafting";
+            if ((inventory.m_splitDialog != null && inventory.m_splitDialog.IsActive)) return "InventorySplitDialog";
             if (IsVisible(inventory.m_variantDialog)) return "InventoryVariantDialog";
             if (IsVisible(inventory.m_skillsDialog)) return "InventorySkillsDialog";
             if (IsVisible(inventory.m_textsDialog)) return "InventoryTextsDialog";

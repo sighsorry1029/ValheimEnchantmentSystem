@@ -213,9 +213,9 @@ internal static class ScrollCombineService
         }
 
         GridState state = GetOrCreateGridState(inventoryGrid);
-        if (!ReferenceEquals(state.Inventory, inventoryGrid.m_inventory))
+        if (!ReferenceEquals(state.Inventory, inventoryGrid.GetInventory()))
         {
-            BindInventoryGrid(inventoryGrid, inventoryGrid.m_inventory);
+            BindInventoryGrid(inventoryGrid, inventoryGrid.GetInventory());
             state = GetOrCreateGridState(inventoryGrid);
         }
 
@@ -236,8 +236,8 @@ internal static class ScrollCombineService
     private static bool RefreshCombineIndicators(GridState state)
     {
         InventoryGrid? inventoryGrid = state.Grid;
-        Inventory? inventory = inventoryGrid?.m_inventory ?? state.Inventory;
-        if (inventoryGrid == null || inventory == null || inventoryGrid.m_elements == null)
+        Inventory? inventory = inventoryGrid?.GetInventory() ?? state.Inventory;
+        if (inventoryGrid == null || inventory == null || inventoryGrid.VES_m_elements() == null)
         {
             return false;
         }
@@ -268,7 +268,7 @@ internal static class ScrollCombineService
                 continue;
             }
 
-            int elementIndex = item.m_gridPos.y * inventory.m_width + item.m_gridPos.x;
+            int elementIndex = item.m_gridPos.y * inventory.GetWidth() + item.m_gridPos.x;
             if (elementIndex < 0 || elementIndex >= state.Overlays.Length)
             {
                 continue;
@@ -291,19 +291,19 @@ internal static class ScrollCombineService
     private static void EnsureOverlayCache(GridState state)
     {
         InventoryGrid? inventoryGrid = state.Grid;
-        if (inventoryGrid?.m_elements == null)
+        if (inventoryGrid?.VES_m_elements() == null)
         {
             state.Overlays = Array.Empty<OverlayRefs>();
             return;
         }
 
-        bool rebuild = state.Overlays.Length != inventoryGrid.m_elements.Count;
+        bool rebuild = state.Overlays.Length != inventoryGrid.VES_m_elements().Count;
         if (!rebuild)
         {
-            for (int i = 0; i < inventoryGrid.m_elements.Count; ++i)
+            for (int i = 0; i < inventoryGrid.VES_m_elements().Count; ++i)
             {
-                InventoryGrid.Element element = inventoryGrid.m_elements[i];
-                GameObject? elementGo = element?.m_go;
+                InventoryElement element = inventoryGrid.VES_m_elements()[i];
+                GameObject? elementGo = element?.gameObject;
                 OverlayRefs overlay = state.Overlays[i];
                 if (elementGo == null || overlay.Root == null || overlay.ElementInstanceId != elementGo.GetInstanceID())
                 {
@@ -318,11 +318,11 @@ internal static class ScrollCombineService
             return;
         }
 
-        OverlayRefs[] overlays = new OverlayRefs[inventoryGrid.m_elements.Count];
-        for (int i = 0; i < inventoryGrid.m_elements.Count; ++i)
+        OverlayRefs[] overlays = new OverlayRefs[inventoryGrid.VES_m_elements().Count];
+        for (int i = 0; i < inventoryGrid.VES_m_elements().Count; ++i)
         {
-            InventoryGrid.Element element = inventoryGrid.m_elements[i];
-            GameObject? elementGo = element?.m_go;
+            InventoryElement element = inventoryGrid.VES_m_elements()[i];
+            GameObject? elementGo = element?.gameObject;
             Transform? combine = elementGo != null ? elementGo.transform.Find("VES_Combine") : null;
             overlays[i] = new OverlayRefs(
                 elementGo ? elementGo.GetInstanceID() : 0,
@@ -385,7 +385,7 @@ internal static class ScrollCombineService
         }
 
         Vector2i buttonPos = inventoryGrid.GetButtonPos(element.gameObject);
-        ItemDrop.ItemData itemAt = inventoryGrid.m_inventory.GetItemAt(buttonPos.x, buttonPos.y);
+        ItemDrop.ItemData itemAt = inventoryGrid.GetInventory().GetItemAt(buttonPos.x, buttonPos.y);
         if (!ScrollRegistry.IsUpgradeableScroll(itemAt))
         {
             return;
@@ -404,13 +404,13 @@ internal static class ScrollCombineService
             return;
         }
 
-        if (!TryConsumePattern(itemAt, inventoryGrid.m_inventory, out int amountToInstantiate))
+        if (!TryConsumePattern(itemAt, inventoryGrid.GetInventory(), out int amountToInstantiate))
         {
             return;
         }
 
-        Utils.InstantiateItem(upgradedPrefab, amountToInstantiate, 1, inventoryGrid.m_inventory);
-        RequestRefresh(inventoryGrid.m_inventory);
+        Utils.InstantiateItem(upgradedPrefab, amountToInstantiate, 1, inventoryGrid.GetInventory());
+        RequestRefresh(inventoryGrid.GetInventory());
         UI.VES_UI.PlayClick();
     }
 
@@ -478,7 +478,7 @@ internal static class ScrollCombineService
         int leftLeft = pos.x - 2;
         int rightRight = pos.x + 2;
 
-        if (left < 0 || right >= grid.m_width)
+        if (left < 0 || right >= grid.GetWidth())
         {
             return false;
         }
@@ -495,7 +495,7 @@ internal static class ScrollCombineService
             return false;
         }
 
-        if (rightRight < grid.m_width && grid.GetItemAt(rightRight, pos.y) is { } rightRightItem && rightRightItem.m_dropPrefab.name == item.m_dropPrefab.name)
+        if (rightRight < grid.GetWidth() && grid.GetItemAt(rightRight, pos.y) is { } rightRightItem && rightRightItem.m_dropPrefab.name == item.m_dropPrefab.name)
         {
             return false;
         }
@@ -524,7 +524,7 @@ internal static class ScrollCombineService
         int right = pos.x + 1;
         int up = pos.y - 1;
         int down = pos.y + 1;
-        if (left < 0 || right >= grid.m_width || up < 0 || down >= grid.m_height)
+        if (left < 0 || right >= grid.GetWidth() || up < 0 || down >= grid.GetHeight())
         {
             return false;
         }
@@ -642,7 +642,7 @@ internal static class ScrollCombineService
 
     private static bool HasAdjacentDuplicate(Inventory inventory, string prefabName, int x, int y)
     {
-        if (x < 0 || y < 0 || x >= inventory.m_width || y >= inventory.m_height)
+        if (x < 0 || y < 0 || x >= inventory.GetWidth() || y >= inventory.GetHeight())
         {
             return false;
         }

@@ -96,6 +96,7 @@ resourceMap:
   - Turnip
   - WitheredBone
   - CuredSquirrelHamstring
+  - WrithanRoots
 - biome: Ocean
   materials:
   - Chitin
@@ -151,6 +152,7 @@ resourceMap:
   - Wisp
   - YagluthDrop
   - YggdrasilWood
+  - Hook
 - biome: AshLands
   materials:
   - FlametalNew
@@ -176,7 +178,20 @@ resourceMap:
   - VoltureEgg
   - VoltureMeat
 - biome: DeepNorth
-  materials: []
+  materials:
+  - BarkaBranch
+  - CrownJewel
+  - ElakingHairBundle
+  - Frostwood
+  - Gold
+  - Leatherstraps
+  - MooseHide
+  - MooseSinew
+  - NornThread
+  - OrbFrostFire
+  - OrbThunderBlood
+  - SealHide
+  - TrophyMoose
 """;
 
     private const int MaxSkippedRecipeExamples = 10;
@@ -593,6 +608,13 @@ resourceMap:
             return false;
         }
 
+        // Uncast materials can carry weapon attacks, but foundry conversion discards their custom data.
+        // Keep this exclusion in automatic assignment; explicit requirement files remain authoritative.
+        if (item.m_shared.m_itemType == ItemDrop.ItemData.ItemType.Material)
+        {
+            return false;
+        }
+
         if (IsItemTypeOrAttach(item, ItemDrop.ItemData.ItemType.Helmet) ||
             IsItemTypeOrAttach(item, ItemDrop.ItemData.ItemType.Chest) ||
             IsItemTypeOrAttach(item, ItemDrop.ItemData.ItemType.Legs) ||
@@ -701,7 +723,7 @@ resourceMap:
     }
 
     // Keep these hooks under this root so its initialization failure still blocks them in PatchRegistry.
-    [HarmonyPatch(typeof(ObjectDB), nameof(ObjectDB.Awake))]
+    [HarmonyPatch(typeof(ObjectDB), "Awake")]
     private static class ObjectDB_Awake_Patch
     {
         [UsedImplicitly]
@@ -723,7 +745,7 @@ resourceMap:
         }
     }
 
-    [HarmonyPatch(typeof(ObjectDB), nameof(ObjectDB.UpdateRegisters))]
+    [HarmonyPatch(typeof(ObjectDB), "UpdateRegisters")]
     private static class ObjectDB_UpdateRegisters_Patch
     {
         [UsedImplicitly]
@@ -734,7 +756,7 @@ resourceMap:
         }
     }
 
-    [HarmonyPatch(typeof(ZNet), nameof(ZNet.Awake))]
+    [HarmonyPatch(typeof(ZNet), "Awake")]
     private static class ZNet_Awake_Patch
     {
         [UsedImplicitly]

@@ -178,7 +178,7 @@ public static class SkillScrollService
         return true;
     }
 
-    [HarmonyPatch(typeof(ZNetScene), nameof(ZNetScene.Awake))]
+    [HarmonyPatch(typeof(ZNetScene), "Awake")]
     private static class ZNetScene_Awake_Patch
     {
         [UsedImplicitly]
@@ -191,7 +191,7 @@ public static class SkillScrollService
                 if (!__instance.m_prefabs.Contains(prefab))
                     __instance.m_prefabs.Add(prefab);
 
-                __instance.m_namedPrefabs[prefab.name.GetStableHashCode()] = prefab;
+                __instance.VES_m_namedPrefabs()[prefab.name.GetStableHashCode()] = prefab;
             }
 
             if (ZRoutedRpc.instance != null)
@@ -244,7 +244,7 @@ public static class SkillScrollService
             return false;
         }
 
-        if (sender == ZRoutedRpc.instance.m_id)
+        if (sender == ZRoutedRpc.instance.VES_m_id())
         {
             Player localPlayer = Player.m_localPlayer;
             if (localPlayer == null)
@@ -321,6 +321,8 @@ public static class SkillScrollService
 
     public sealed class ExpScroll : MonoBehaviour, Interactable, Hoverable
     {
+        public float GetHoverOffset() => 0f;
+
         private const string ZdoCreationTime = "CreationTime";
         private const int MaxDuration = 120;
 
@@ -452,7 +454,7 @@ public static class SkillScrollService
             if (EnvMan.instance == null)
                 return false;
 
-            currentSeconds = EnvMan.instance.m_totalSeconds;
+            currentSeconds = EnvMan.instance.VES_m_totalSeconds();
             return true;
         }
 

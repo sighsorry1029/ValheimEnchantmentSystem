@@ -396,14 +396,6 @@ public class ItemInfo : IEnumerable<ItemData>
 		SaveItem(__instance);
 	}
 
-	private static void SaveInventoryPrefix(Inventory __instance)
-	{
-		foreach (ItemDrop.ItemData item in __instance.m_inventory)
-		{
-			SaveItem(item);
-		}
-	}
-
 	private static void SaveItem(ItemDrop.ItemData item)
 	{
 		if (ItemExtensions.itemInfo.TryGetValue(item, out ItemInfo info))
@@ -516,7 +508,7 @@ public class ItemInfo : IEnumerable<ItemData>
 
 	private static void RegisterForceLoadedTypesOnPlayerLoaded(Player __instance)
 	{
-		foreach (Player.Food food in __instance.m_foods)
+		foreach (Player.Food food in __instance.GetFoods())
 		{
 			GameObject foodPrefab = ObjectDB.instance.GetItemPrefab(food.m_name);
 			if (foodPrefab.GetComponent<ItemDrop>().m_itemData == food.m_item)
@@ -530,8 +522,12 @@ public class ItemInfo : IEnumerable<ItemData>
 
 	private static ItemDrop.ItemData? checkingForStackableItemData;
 
-	private static void SaveCheckingForStackableItemData(ItemDrop.ItemData item) => checkingForStackableItemData = item;
-	private static void ResetCheckingForStackableItemData() => checkingForStackableItemData = null;
+	private static void SaveCheckingForStackableItemData(ItemDrop.ItemData item, out ItemDrop.ItemData? __state)
+	{
+		__state = checkingForStackableItemData;
+		checkingForStackableItemData = item;
+	}
+	private static void ResetCheckingForStackableItemData(ItemDrop.ItemData? __state) => checkingForStackableItemData = __state;
 
 	private static Dictionary<string, string>? newValuesOnStackable;
 
@@ -696,6 +692,17 @@ public class ItemInfo : IEnumerable<ItemData>
 	}
 
 	private static ItemDrop.ItemData? currentlyUpgradingItem;
+	private static int? upgradeOutputQuality;
+
+	private static void BeginCraftOutput(string name, int quality, out int? __state)
+	{
+		__state = upgradeOutputQuality;
+		// The 1.0 upgrader can return materials on destruction or recreate a downgraded item.
+		// Only the replacement equipment inherits item data; resource returns must not.
+		upgradeOutputQuality = currentlyUpgradingItem?.m_dropPrefab != null &&
+			currentlyUpgradingItem.m_dropPrefab.name == name ? quality : null;
+	}
+	private static void EndCraftOutput(int? __state) => upgradeOutputQuality = __state;
 
 	private static IEnumerable<CodeInstruction> TransferCustomItemDataOnUpgrade(IEnumerable<CodeInstruction> instructions, ILGenerator ilg)
 	{
@@ -715,21 +722,22 @@ public class ItemInfo : IEnumerable<ItemData>
 
 	private static void CopyCustomDataFromUpgradedItem(ItemDrop item)
 	{
-		if (currentlyUpgradingItem is not null)
+		if (currentlyUpgradingItem is not null && upgradeOutputQuality is { } outputQuality)
 		{
+			bool upgraded = outputQuality > currentlyUpgradingItem.m_quality;
 			item.m_itemData.m_customData = currentlyUpgradingItem.m_customData;
 			ItemInfo info = currentlyUpgradingItem.Data();
 			ItemExtensions.itemInfo.Remove(currentlyUpgradingItem);
 			ItemExtensions.itemInfo.Add(item.m_itemData, info);
 
-			item.m_itemData.m_quality = currentlyUpgradingItem.m_quality + 1;
+			item.m_itemData.m_quality = outputQuality;
 			item.m_itemData.m_variant = currentlyUpgradingItem.m_variant;
 			info.ItemData = item.m_itemData;
 			info.LoadAll();
 
 			foreach (ItemData itemData in info.data.Values)
 			{
-				itemData.Upgraded();
+				if (upgraded) itemData.Upgraded();
 			}
 			currentlyUpgradingItem = null;
 			awakeningItem = null;
@@ -738,18 +746,12 @@ public class ItemInfo : IEnumerable<ItemData>
 		{
 			ZNetView netView = item.GetComponent<ZNetView>();
 			ZDO? zdo = netView && netView.IsValid() ? netView.GetZDO() : null;
-			if (zdo is null || zdo.GetInt(ZDOVars.s_dataCount, -1) == -1)
+			if (zdo is null || zdo.GetByteArray(ZDOVars.s_itemData) == null)
 			{
 				item.m_itemData.m_customData = new Dictionary<string, string>(prefab.GetComponent<ItemDrop>().m_itemData.m_customData);
-				if (zdo is not null)
+				if (zdo is not null && netView.IsOwner())
 				{
-					int num = 0;
-					zdo.Set(ZDOVars.s_dataCount, item.m_itemData.m_customData.Count);
-					foreach (KeyValuePair<string, string> keyValuePair in item.m_itemData.m_customData)
-					{
-						zdo.Set($"data_{num}", keyValuePair.Key);
-						zdo.Set($"data__{num++}", keyValuePair.Value);
-					}
+					ItemDrop.SaveToZDO(item.m_itemData, zdo);
 				}
 			}
 		}
@@ -780,34 +782,34 @@ public class ItemInfo : IEnumerable<ItemData>
 	static ItemInfo()
 	{
 		Harmony harmony = new("org.bepinex.helpers.ItemDataManager");
-		harmony.Patch(AccessTools.DeclaredMethod(typeof(Inventory), nameof(Inventory.Save)), prefix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(SaveInventoryPrefix)), Priority.First));
-		foreach (MethodInfo method in typeof(ItemDrop.ItemData).GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic).Where(m => m.Name == nameof(ItemDrop.SaveToZDO)))
-		{
-			harmony.Patch(method, prefix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(SavePrefix)), Priority.First));
-		}
+		// 1.0 serializes both inventory and ZDO items through ItemData.Save.
+		harmony.Patch(AccessTools.DeclaredMethod(typeof(ItemDrop.ItemData), nameof(ItemDrop.ItemData.Save), new[] { typeof(ZPackage) }),
+			prefix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(SavePrefix)), Priority.First));
 
-		harmony.Patch(AccessTools.DeclaredMethod(typeof(Inventory), nameof(Inventory.AddItem), new[] { typeof(ItemDrop.ItemData), typeof(int), typeof(int), typeof(int) }), prefix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(CheckItemDataStackableAddItem))), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(ApplyCustomItemDataStackableAddItem))));
+		harmony.Patch(AccessTools.DeclaredMethod(typeof(Inventory), nameof(Inventory.AddItem), new[] { typeof(ItemDrop.ItemData), typeof(int), typeof(int), typeof(int), typeof(bool) }), prefix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(CheckItemDataStackableAddItem))), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(ApplyCustomItemDataStackableAddItem))));
 
 		harmony.Patch(AccessTools.DeclaredMethod(typeof(Inventory), nameof(Inventory.CanAddItem), new[] { typeof(ItemDrop.ItemData), typeof(int) }), prefix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(SaveCheckingForStackableItemData))), finalizer: new HarmonyMethod(typeof(ItemInfo), nameof(ResetCheckingForStackableItemData)));
 		harmony.Patch(AccessTools.DeclaredMethod(typeof(Inventory), nameof(Inventory.AddItem), new[] { typeof(ItemDrop.ItemData) }), prefix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(SaveCheckingForStackableItemData))), finalizer: new HarmonyMethod(typeof(ItemInfo), nameof(ResetCheckingForStackableItemData)));
+		harmony.Patch(AccessTools.DeclaredMethod(typeof(Inventory), nameof(Inventory.AddItem), new[] { typeof(ItemDrop.ItemData), typeof(Vector2i) }), prefix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(SaveCheckingForStackableItemData))), finalizer: new HarmonyMethod(typeof(ItemInfo), nameof(ResetCheckingForStackableItemData)));
 
 		harmony.Patch(AccessTools.DeclaredMethod(typeof(Inventory), nameof(Inventory.FindFreeStackSpace)), transpiler: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(CheckStackableInFindFreeStackMethods))));
-		harmony.Patch(AccessTools.DeclaredMethod(typeof(Inventory), nameof(Inventory.FindFreeStackItem)), transpiler: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(CheckStackableInFindFreeStackMethods))), prefix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(ResetNewValuesOnStackable))), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(ApplyNewValuesOnStackable))));
+		harmony.Patch(AccessTools.DeclaredMethod(typeof(Inventory), "FindFreeStackItem"), transpiler: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(CheckStackableInFindFreeStackMethods))), prefix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(ResetNewValuesOnStackable))), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(ApplyNewValuesOnStackable))));
 
-		harmony.Patch(AccessTools.DeclaredMethod(typeof(ItemDrop), nameof(ItemDrop.AutoStackItems)), transpiler: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(HandleAutostackableItems))));
+		harmony.Patch(AccessTools.DeclaredMethod(typeof(ItemDrop), "AutoStackItems"), transpiler: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(HandleAutostackableItems))));
 
-		harmony.Patch(AccessTools.DeclaredMethod(typeof(InventoryGui), nameof(InventoryGui.DoCrafting)), transpiler: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(TransferCustomItemDataOnUpgrade))), finalizer: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(ResetCurrentlyUpgradingItem))));
+		harmony.Patch(AccessTools.DeclaredMethod(typeof(InventoryGui), "DoCrafting"), transpiler: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(TransferCustomItemDataOnUpgrade))), finalizer: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(ResetCurrentlyUpgradingItem))));
 
 		// Force loads
-		foreach (MethodInfo method in typeof(ItemDrop.ItemData).GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic).Where(m => m.Name == nameof(ItemDrop.LoadFromZDO)))
-		{
-			harmony.Patch(method, postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(RegisterForceLoadedTypes))));
-		}
+		harmony.Patch(AccessTools.DeclaredMethod(typeof(ItemDrop), nameof(ItemDrop.LoadFromZDO), new[] { typeof(ItemDrop.ItemData), typeof(ZDO), typeof(int) }),
+			postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(RegisterForceLoadedTypes))));
 		// Note: Inventory load implicitly handled by ItemData.Clone() handling within AddItem
 		harmony.Patch(AccessTools.DeclaredMethod(typeof(Player), nameof(Player.Load)), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(RegisterForceLoadedTypesOnPlayerLoaded)), Priority.VeryHigh));
-		harmony.Patch(AccessTools.DeclaredMethod(typeof(Inventory), nameof(Inventory.AddItem), new[] { typeof(string), typeof(int), typeof(int), typeof(int), typeof(long), typeof(string), typeof(Vector2i), typeof(bool) }), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(RegisterForceLoadedTypesAddItem)), Priority.First));
-		harmony.Patch(AccessTools.DeclaredMethod(typeof(ItemDrop), nameof(ItemDrop.Awake)), prefix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(TrackAwakeningItem))), transpiler: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(ImportCustomDataOnUpgrade)), Priority.First), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(ItemDropAwake)), Priority.First));
-		harmony.Patch(AccessTools.DeclaredMethod(typeof(ItemDrop), nameof(ItemDrop.Awake)), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(ItemDropAwakeDelayed)), Priority.First - 1));
+		harmony.Patch(AccessTools.DeclaredMethod(typeof(Inventory), nameof(Inventory.AddItem), new[] { typeof(string), typeof(int), typeof(int), typeof(int), typeof(long), typeof(string), typeof(Vector2i), typeof(bool), typeof(bool), typeof(bool) }),
+			prefix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(BeginCraftOutput))),
+			postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(RegisterForceLoadedTypesAddItem)), Priority.First),
+			finalizer: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(EndCraftOutput))));
+		harmony.Patch(AccessTools.DeclaredMethod(typeof(ItemDrop), "Awake"), prefix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(TrackAwakeningItem))), transpiler: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(ImportCustomDataOnUpgrade)), Priority.First), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(ItemDropAwake)), Priority.First));
+		harmony.Patch(AccessTools.DeclaredMethod(typeof(ItemDrop), "Awake"), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(ItemDropAwakeDelayed)), Priority.First - 1));
 		harmony.Patch(AccessTools.DeclaredMethod(typeof(ItemDrop.ItemData), nameof(ItemDrop.ItemData.Clone)), prefix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(ItemDataClonePrefix))), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(ItemDataClonePostfix)), Priority.HigherThanNormal));
 		harmony.Patch(AccessTools.DeclaredMethod(typeof(ItemDrop.ItemData), nameof(ItemDrop.ItemData.Clone)), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(ItemInfo), nameof(ItemDataClonePostfixDelayed)), Priority.HigherThanNormal - 1));
 	}

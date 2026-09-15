@@ -334,7 +334,7 @@ public static class Notifications_UI
             itemPrefab ?? "No Prefab", type, prevLevel, level);
     }
 
-    [HarmonyPatch(typeof(ZNetScene), nameof(ZNetScene.Awake))]
+    [HarmonyPatch(typeof(ZNetScene), "Awake")]
     [ClientOnlyPatch]
     private static class ZNetScene_Awake_Patch
     {
@@ -360,7 +360,7 @@ public static class Notifications_UI
         }
     }
     
-    [HarmonyPatch(typeof(ZNetScene),nameof(ZNetScene.Awake))]
+    [HarmonyPatch(typeof(ZNetScene),"Awake")]
     private static class ZNetScene_Awake_Server_Patch
     {
         [UsedImplicitly]
@@ -378,7 +378,7 @@ public static class Notifications_UI
         }
     }
 
-    [HarmonyPatch(typeof(FejdStartup), nameof(FejdStartup.Awake))]
+    [HarmonyPatch(typeof(FejdStartup), "Awake")]
     [ClientOnlyPatch]
     private static class FejdStartup_Awake_Patch
     {

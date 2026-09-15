@@ -100,7 +100,7 @@ internal sealed class MainEnchantmentController
         ResetState();
         // IsVisible includes a short hidden-frame grace period after closing the inventory.
         // A global shortcut must reopen the actual window even during that period.
-        if (!InventoryGui.instance.m_animator.GetBool("visible"))
+        if (!InventoryGui.instance.VES_m_animator().GetBool("visible"))
         {
             InventoryGui.instance.Show(null);
         }
@@ -156,7 +156,7 @@ internal sealed class MainEnchantmentController
             return;
         }
 
-        if (_currentItem == null || !Player.m_localPlayer.m_inventory.ContainsItem(_currentItem))
+        if (_currentItem == null || !Player.m_localPlayer.GetInventory().ContainsItem(_currentItem))
         {
             Hide();
             return;
@@ -179,7 +179,7 @@ internal sealed class MainEnchantmentController
 
     private void HandleStartButton()
     {
-        if (_currentItem == null || !Player.m_localPlayer || !Player.m_localPlayer.m_inventory.ContainsItem(_currentItem))
+        if (_currentItem == null || !Player.m_localPlayer || !Player.m_localPlayer.GetInventory().ContainsItem(_currentItem))
         {
             ResetState();
             return;
@@ -270,7 +270,7 @@ internal sealed class MainEnchantmentController
 
         ResetState();
         InventoryGui.instance.SetupDragItem(null, null, 1);
-        if (!Player.m_localPlayer.m_inventory.ContainsItem(item))
+        if (!Player.m_localPlayer.GetInventory().ContainsItem(item))
         {
             return;
         }

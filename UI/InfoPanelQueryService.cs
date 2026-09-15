@@ -166,7 +166,7 @@ internal static class InfoPanelQueryService
             }
 
             string itemName = item.m_itemData.m_shared.m_name;
-            if (!Player.m_localPlayer.m_knownRecipes.Contains(itemName) && !Player.m_localPlayer.m_knownMaterial.Contains(itemName))
+            if (!Player.m_localPlayer.VES_m_knownRecipes().Contains(itemName) && !Player.m_localPlayer.VES_m_knownMaterial().Contains(itemName))
             {
                 continue;
             }

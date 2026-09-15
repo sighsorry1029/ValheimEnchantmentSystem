@@ -21,8 +21,8 @@ internal static class ArmorStandVfx
             return;
         }
 
-        string itemName = armorStand.m_slots[slotIndex].m_visualName;
-        if (string.IsNullOrEmpty(itemName))
+        int itemHash = armorStand.m_slots[slotIndex].m_visualHash;
+        if (itemHash == 0)
         {
             if (writeMetadata)
             {
@@ -32,7 +32,7 @@ internal static class ArmorStandVfx
             return;
         }
 
-        GameObject itemPrefab = ObjectDB.instance ? ObjectDB.instance.GetItemPrefab(itemName) : null;
+        GameObject itemPrefab = ObjectDB.instance ? ObjectDB.instance.GetItemPrefab(itemHash) : null;
         if (!itemPrefab)
         {
             return;
@@ -47,7 +47,7 @@ internal static class ArmorStandVfx
         ItemDrop.ItemData itemData = itemDrop.m_itemData.Clone();
         if (armorStandZdo != null)
         {
-            ItemDrop.LoadFromZDO(slotIndex, itemData, armorStandZdo);
+            ItemDrop.LoadFromZDO(itemData, armorStandZdo, slotIndex);
         }
         else
         {
@@ -68,16 +68,16 @@ internal static class ArmorStandVfx
             return;
         }
 
-        ZDO visEquipmentZdo = armorStand.m_visEquipment.m_nview?.GetZDO();
+        ZDO visEquipmentZdo = armorStand.m_visEquipment.VES_m_nview()?.GetZDO();
         if (visEquipmentZdo == null)
         {
             return;
         }
 
-        ZDO armorStandZdo = armorStand.m_nview?.GetZDO();
-        bool writeMetadata = armorStand.m_visEquipment.m_nview != null &&
-                             armorStand.m_visEquipment.m_nview.IsValid() &&
-                             armorStand.m_visEquipment.m_nview.IsOwner();
+        ZDO armorStandZdo = armorStand.VES_m_nview()?.GetZDO();
+        bool writeMetadata = armorStand.m_visEquipment.VES_m_nview() != null &&
+                             armorStand.m_visEquipment.VES_m_nview().IsValid() &&
+                             armorStand.m_visEquipment.VES_m_nview().IsOwner();
         if (armorStand.m_slots != null)
         {
             for (int i = 0; i < armorStand.m_slots.Count; ++i)
@@ -104,7 +104,7 @@ internal static class ArmorStandVfx
 
     private static void ForceInitialArmorStandRefresh(ArmorStand armorStand)
     {
-        if (armorStand == null || armorStand.m_nview == null || !armorStand.m_nview.IsValid())
+        if (armorStand == null || armorStand.VES_m_nview() == null || !armorStand.VES_m_nview().IsValid())
         {
             return;
         }
@@ -146,7 +146,7 @@ internal static class ArmorStandVfx
         }
     }
 
-    [HarmonyPatch(typeof(ArmorStand), "SetVisualItem", new[] { typeof(int), typeof(string), typeof(int) })]
+    [HarmonyPatch(typeof(ArmorStand), "SetVisualItem", new[] { typeof(int), typeof(int), typeof(int) })]
     [ClientOnlyPatch]
     private static class ArmorStand_SetVisualItem_Patch
     {
@@ -162,7 +162,7 @@ internal static class ArmorStandVfx
         }
     }
 
-    [HarmonyPatch(typeof(ArmorStand), nameof(ArmorStand.Awake))]
+    [HarmonyPatch(typeof(ArmorStand), "Awake")]
     [ClientOnlyPatch]
     private static class ArmorStand_Awake_Patch
     {

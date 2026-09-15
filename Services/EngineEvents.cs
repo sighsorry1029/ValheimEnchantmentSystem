@@ -11,7 +11,7 @@ internal static class EngineEvents
     public static event Action<FejdStartup>? MainMenuAwake;
     public static event Action? WorldAwake;
 
-    [HarmonyPatch(typeof(Inventory), nameof(Inventory.Changed))]
+    [HarmonyPatch(typeof(Inventory), "Changed")]
     [ClientOnlyPatch]
     private static class Inventory_Changed_Patch
     {
@@ -54,7 +54,7 @@ internal static class EngineEvents
         }
     }
 
-    [HarmonyPatch(typeof(FejdStartup), nameof(FejdStartup.Awake))]
+    [HarmonyPatch(typeof(FejdStartup), "Awake")]
     [ClientOnlyPatch]
     private static class FejdStartup_Awake_Patch
     {
@@ -65,7 +65,7 @@ internal static class EngineEvents
         }
     }
 
-    [HarmonyPatch(typeof(ZNetScene), nameof(ZNetScene.Awake))]
+    [HarmonyPatch(typeof(ZNetScene), "Awake")]
     [ClientOnlyPatch]
     private static class ZNetScene_Awake_Patch
     {

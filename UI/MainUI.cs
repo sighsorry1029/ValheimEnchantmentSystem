@@ -193,7 +193,7 @@ public static class VES_UI
         if (!CanHandleShortcut()) return false;
 
         // Global shortcuts do not depend on an inactive inventory button or its gamepad UI group.
-        UIGamePad.m_lastInteractFrame = Time.frameCount;
+        GameAccess.SetLastInteractFrame(Time.frameCount);
         // Holding a shoulder modifier may already have opened the radial menu. Cancel it without
         // activating its selected item before opening the inventory or toggling our panel.
         if (Hud.instance != null && Hud.instance.m_radialMenu != null && Hud.instance.m_radialMenu.Active)
@@ -359,7 +359,7 @@ public static class VES_UI
         return AUsrc;
     }
 
-    [HarmonyPatch(typeof(AudioMan), nameof(AudioMan.Awake))]
+    [HarmonyPatch(typeof(AudioMan), "Awake")]
     [ClientOnlyPatch]
     private static class AudioMan_Awake_Patch
     {
@@ -379,16 +379,16 @@ public static class VES_UI
         }
     }
 
-    [HarmonyPatch(typeof(InventoryGui), nameof(InventoryGui.SetupDragItem))]
+    [HarmonyPatch(typeof(InventoryGui), "SetupDragItem")]
     [ClientOnlyPatch]
     private static class InventoryGui_SetupDragItem_Patch
     {
         [UsedImplicitly]
         private static void Postfix(InventoryGui __instance)
         {
-            if (__instance.m_dragGo && __instance.m_dragItem != null)
+            if (__instance.VES_m_dragGo() && __instance.VES_m_dragItem() != null)
             {
-                _controller?.HandleDraggedItem(__instance.m_dragItem);
+                _controller?.HandleDraggedItem(__instance.VES_m_dragItem());
             }
         }
     }

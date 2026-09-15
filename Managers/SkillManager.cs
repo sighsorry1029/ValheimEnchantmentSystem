@@ -137,7 +137,7 @@ public class Skill
 				alias = $"${alias}";
 			}
 			Localizations["alias"] = alias;
-			if (Localization.m_instance != null)
+			if (GameAccess.ExistingLocalization != null)
 			{
 				Localization.instance.AddWord(Key, Localization.instance.Localize(alias));
 			}
@@ -181,13 +181,13 @@ public class Skill
 		private LocalizeKey addForLang(string lang, string value)
 		{
 			Localizations[lang] = value;
-			if (Localization.m_instance != null)
+			if (GameAccess.ExistingLocalization != null)
 			{
 				if (Localization.instance.GetSelectedLanguage() == lang)
 				{
 					Localization.instance.AddWord(Key, value);
 				}
-				else if (lang == "English" && !Localization.instance.m_translations.ContainsKey(Key))
+				else if (lang == "English" && !Localization.instance.VES_m_translations().ContainsKey(Key))
 				{
 					Localization.instance.AddWord(Key, value);
 				}
@@ -216,16 +216,16 @@ public class Skill
 	static Skill()
 	{
 		Harmony harmony = new("org.bepinex.helpers.skillmanager");
-		harmony.Patch(AccessTools.DeclaredMethod(typeof(FejdStartup), nameof(FejdStartup.Awake)), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Skill), nameof(Patch_FejdStartup))));
-		harmony.Patch(AccessTools.DeclaredMethod(typeof(ZNet), nameof(ZNet.Awake)), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Skill), nameof(Patch_ZNet_Awake))));
+		harmony.Patch(AccessTools.DeclaredMethod(typeof(FejdStartup), "Awake"), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Skill), nameof(Patch_FejdStartup))));
+		harmony.Patch(AccessTools.DeclaredMethod(typeof(ZNet), "Awake"), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Skill), nameof(Patch_ZNet_Awake))));
 		harmony.Patch(AccessTools.DeclaredMethod(typeof(Skills), nameof(Skills.Awake)), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Skill), nameof(Patch_Skills_Awake))));
-		harmony.Patch(AccessTools.DeclaredMethod(typeof(Skills), nameof(Skills.GetSkillDef)), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Skill), nameof(Patch_Skills_GetSkillDef))));
+		harmony.Patch(AccessTools.DeclaredMethod(typeof(Skills), "GetSkillDef"), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Skill), nameof(Patch_Skills_GetSkillDef))));
 		harmony.Patch(AccessTools.DeclaredMethod(typeof(Skills), nameof(Skills.Load)), prefix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Skill), nameof(Patch_Skills_Load_Prefix))), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Skill), nameof(Patch_Skills_Load_Postfix))));
-		harmony.Patch(AccessTools.DeclaredMethod(typeof(Skills), nameof(Skills.IsSkillValid)), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Skill), nameof(Patch_Skills_IsSkillValid))));
+		harmony.Patch(AccessTools.DeclaredMethod(typeof(Skills), "IsSkillValid"), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Skill), nameof(Patch_Skills_IsSkillValid))));
 		harmony.Patch(AccessTools.DeclaredMethod(typeof(Skills), nameof(Skills.CheatRaiseSkill)), new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Skill), nameof(Patch_Skills_CheatRaiseskill))));
 		harmony.Patch(AccessTools.DeclaredMethod(typeof(Skills), nameof(Skills.CheatResetSkill)), new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Skill), nameof(Patch_Skills_CheatResetSkill))));
 		harmony.Patch(AccessTools.DeclaredMethod(typeof(Localization), nameof(Localization.LoadCSV)), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(LocalizeKey), nameof(LocalizeKey.AddLocalizedKeys))));
-		harmony.Patch(AccessTools.DeclaredMethod(typeof(Terminal), nameof(Terminal.InitTerminal)), new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Skill), nameof(Patch_Terminal_InitTerminal_Prefix))), new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Skill), nameof(Patch_Terminal_InitTerminal))));
+		harmony.Patch(AccessTools.DeclaredMethod(typeof(Terminal), "InitTerminal"), new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Skill), nameof(Patch_Terminal_InitTerminal_Prefix))), new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Skill), nameof(Patch_Terminal_InitTerminal))));
 		harmony.Patch(AccessTools.DeclaredMethod(typeof(Skills), nameof(Skills.OnDeath)), new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Skill), nameof(Patch_Skills_OnDeath_Prefix))), finalizer: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Skill), nameof(Patch_Skills_OnDeath_Finalizer))));
 	}
 
@@ -454,7 +454,7 @@ public class Skill
 		__state ??= new Dictionary<Skills.SkillType, Skills.Skill>();
 		foreach (KeyValuePair<Skills.SkillType, Skill> kv in skills)
 		{
-			if (__instance.m_skillData.TryGetValue(kv.Key, out Skills.Skill skill))
+			if (__instance.VES_m_skillData().TryGetValue(kv.Key, out Skills.Skill skill))
 			{
 				__state[kv.Key] = skill;
 				if (kv.Value.skillLoss > 0)
@@ -462,7 +462,7 @@ public class Skill
 					skill.m_level -= skill.m_level * kv.Value.SkillLoss / 100f;
 					skill.m_accumulator = 0.0f;
 				}
-				__instance.m_skillData.Remove(kv.Key);
+				__instance.VES_m_skillData().Remove(kv.Key);
 			}
 		}
 	}
@@ -473,14 +473,14 @@ public class Skill
 		{
 			foreach (KeyValuePair<Skills.SkillType, Skills.Skill> kv in __state)
 			{
-				__instance.m_skillData[kv.Key] = kv.Value;
+				__instance.VES_m_skillData()[kv.Key] = kv.Value;
 			}
 			__state = null;
 		}
 	}
 
 	private static bool InitializedTerminal = false;
-	private static void Patch_Terminal_InitTerminal_Prefix() => InitializedTerminal = Terminal.m_terminalInitialized;
+	private static void Patch_Terminal_InitTerminal_Prefix() => InitializedTerminal = GameAccess.TerminalInitialized;
 
 	private static void Patch_Terminal_InitTerminal()
 	{
@@ -491,8 +491,8 @@ public class Skill
 
 		void AddSkill(Terminal.ConsoleCommand command)
 		{
-			Terminal.ConsoleOptionsFetcher fetcher = command.m_tabOptionsFetcher;
-			command.m_tabOptionsFetcher = () =>
+			Terminal.ConsoleOptionsFetcher fetcher = command.VES_m_tabOptionsFetcher();
+			command.VES_m_tabOptionsFetcher() = () =>
 			{
 				List<string> options = fetcher();
 				options.AddRange(skills.Values.Select(skill => skill.internalSkillName));
@@ -500,8 +500,8 @@ public class Skill
 			};
 		}
 
-		AddSkill(Terminal.commands["raiseskill"]);
-		AddSkill(Terminal.commands["resetskill"]);
+		AddSkill(GameAccess.TerminalCommands["raiseskill"]);
+		AddSkill(GameAccess.TerminalCommands["resetskill"]);
 	}
 
 	private static Skills.SkillDef? GetSkillDef(Skills.SkillType skillType)
@@ -539,11 +539,17 @@ public class Skill
 	private static Texture2D loadTexture(string name)
 	{
 		Texture2D texture = new(0, 0);
-		texture.LoadImage(ReadEmbeddedFileBytes("icons." + name));
+		// Select the byte[] overload explicitly; Unity 6 also exposes a span overload
+		// that the net48 compiler cannot represent through its reference facade.
+		LoadImageBytes(texture, ReadEmbeddedFileBytes("icons." + name), false);
 		return texture;
 	}
 
 	private static Sprite loadSprite(string name, int width, int height) => Sprite.Create(loadTexture(name), new Rect(0, 0, width, height), Vector2.zero);
+
+	private static readonly Func<Texture2D, byte[], bool, bool> LoadImageBytes =
+		AccessTools.MethodDelegate<Func<Texture2D, byte[], bool, bool>>(AccessTools.Method(typeof(ImageConversion),
+			"LoadImage", new[] { typeof(Texture2D), typeof(byte[]), typeof(bool) }));
 
 	private static BaseUnityPlugin? _plugin;
 	private static BaseUnityPlugin plugin => _plugin ??= (BaseUnityPlugin)BepInEx.Bootstrap.Chainloader.ManagerObject.GetComponent(Assembly.GetExecutingAssembly().DefinedTypes.First(t => t.IsClass && typeof(BaseUnityPlugin).IsAssignableFrom(t)));
@@ -573,7 +579,7 @@ public static class SkillExtensions
 
 	public static void LowerSkill(this Skills skills, string name, float factor)
 	{
-		if (factor > 0 && skills.m_skillData.TryGetValue(Skill.fromName(name), out Skills.Skill skill))
+		if (factor > 0 && skills.VES_m_skillData().TryGetValue(Skill.fromName(name), out Skills.Skill skill))
 		{
 			skill.m_level -= skill.m_level * factor;
 			skill.m_accumulator = 0.0f;

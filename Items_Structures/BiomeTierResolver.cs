@@ -96,7 +96,7 @@ public static class BiomeTierResolver
                 return biome;
         }
 
-        return EnvMan.instance != null ? EnvMan.instance.m_currentBiome : Heightmap.Biome.None;
+        return EnvMan.instance != null ? EnvMan.instance.GetCurrentBiome() : Heightmap.Biome.None;
     }
 
     private static void RegisterBuiltInBiomeConfigs()
@@ -400,7 +400,7 @@ public static class BiomeTierResolver
             yield return entry;
     }
 
-    [HarmonyPatch(typeof(ZoneSystem), nameof(ZoneSystem.Start))]
+    [HarmonyPatch(typeof(ZoneSystem), "Start")]
     private static class ZoneSystem_Start_Patch
     {
         [UsedImplicitly]

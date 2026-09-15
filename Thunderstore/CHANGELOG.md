@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.9.17
+
+- Fixed repeating crafting-tooltip NullReferenceExceptions when ObjectDB contains entries without ItemDrop, including the reported Hammer recipe path
+- Resolve recipe prefab identity through the game's shared-item-data index before falling back to a guarded name lookup, avoiding per-frame full-list scans for registered recipes and ambiguity between registered items with the same shared name
+- Prevent tooltip lookup failures from interrupting recipe-description updates and leaving the previous recipe's description visible
+- Consolidated identical stat lookup and level-definition checks while preserving override priority, defined-null entries, and the separate Enchanted overload's evaluation order
+- Removed the information panel's intermediate layout-component list copy while preserving the full disable-then-enable sequence
+- Verified Debug and Release compilation against original Valheim 1.0.12 assemblies; static client and dedicated-server contract checks do not replace in-game and multiplayer testing
+
+## 1.9.16
+
+- Updated the mod for Valheim 1.0.7 using the original game assemblies, including current Harmony targets, private-member access, UI hooks, item serialization, crafting, inventory, equipment VFX, and optional-mod integration paths
+- Updated the embedded ServerSync baseline for Valheim 1.0.7 while preserving configuration locks, version checks, RPC identifiers, serialized formats, administrator checks, and peer initialization ordering
+- Added 15 progression materials to the default ResourceMap: WrithanRoots in Swamp, Hook in Mistlands, and 13 directly used Deep North materials; existing biome tiers, duplicate precedence, and explicit requirement priority remain unchanged
+- Added explicit S-tier armor requirements for ArmorDeepNorthHeavyChest, ArmorDeepNorthHeavylegs, and HelmetDNHeavy, whose Frost Foundry conversion path has no equipment recipe for automatic assignment
+- Prevented uncast Material items with weapon-like attack data from receiving automatic enchantment requirements, avoiding enchantment data loss during foundry conversion; explicit user requirements remain supported
+- Added deterministic ResourceMap and requirement-priority coverage plus client and dedicated-server metadata checks for Harmony bindings, game references, private accessors, and transpiler contracts
+- No configuration migration or legacy-game compatibility layer is included
+
 ## 1.9.15
 
 - Fixed stale equipped-enchantment stat snapshots after chest-supplied enchantments and enchantment commands

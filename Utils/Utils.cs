@@ -130,7 +130,7 @@ public static class Utils
     public static int CustomCountItemsNoLevel(string prefab)
     {
         int num = 0;
-        foreach (ItemDrop.ItemData itemData in Player.m_localPlayer.m_inventory.m_inventory)
+        foreach (ItemDrop.ItemData itemData in Player.m_localPlayer.GetInventory().GetAllItems())
         {
             if (itemData.m_dropPrefab.name == prefab)
             {
@@ -143,7 +143,7 @@ public static class Utils
 
     public static void CustomRemoveItemsNoLevel(string prefab, int amount)
     {
-        foreach (ItemDrop.ItemData itemData in Player.m_localPlayer.m_inventory.m_inventory)
+        foreach (ItemDrop.ItemData itemData in Player.m_localPlayer.GetInventory().GetAllItems())
         {
             if (itemData.m_dropPrefab.name == prefab)
             {
@@ -155,8 +155,8 @@ public static class Utils
             }
         }
 
-        Player.m_localPlayer.m_inventory.m_inventory.RemoveAll(x => x.m_stack <= 0);
-        Player.m_localPlayer.m_inventory.Changed();
+        Player.m_localPlayer.GetInventory().GetAllItems().RemoveAll(x => x.m_stack <= 0);
+        Player.m_localPlayer.GetInventory().Changed();
     }
 
     public static string IncreaseColorLight(this string color)
@@ -178,10 +178,23 @@ public static class Utils
 
     public static string GetPrefabNameByItemName(string itemname)
     {
-        GameObject find = ObjectDB.instance.m_items.FirstOrDefault(x =>
-            x.GetComponent<ItemDrop>().m_itemData.m_shared.m_name == itemname);
-        if (find == null) return null;
-        return find.name;
+        if (string.IsNullOrEmpty(itemname)) return null;
+        ObjectDB database = ObjectDB.instance;
+        if (!database || database.m_items == null) return null;
+
+        // ObjectDB also registers objects without ItemDrop. Keep this fallback safe
+        // for callers that only have a shared name, including external integrations.
+        foreach (GameObject prefab in database.m_items)
+        {
+            if (!prefab) continue;
+            ItemDrop drop = prefab.GetComponent<ItemDrop>();
+            if (drop && drop.m_itemData?.m_shared?.m_name == itemname)
+            {
+                return prefab.name;
+            }
+        }
+
+        return null;
     }
 
     public static bool TryDeserializeYAML<T>(string text, out T obj, out string error)
@@ -245,7 +258,7 @@ public static class Utils
     }
 
     public static IEnumerable<Enchantment_Core.Enchanted> EquippedEnchantments(this Player p) =>
-        p.m_inventory.GetEquippedItems().Select(x => x.Data().Get<Enchantment_Core.Enchanted>()).Where(x => x?.level > 0);
+        p.GetInventory().GetEquippedItems().Select(x => x.Data().Get<Enchantment_Core.Enchanted>()).Where(x => x?.level > 0);
 
     private static IEnumerator DelayedAction(Action invoke, int skipFrames)
     {
@@ -274,7 +287,7 @@ public static class Utils
             return;
         }
 
-        Skills.Skill skill = localPlayer.m_skills.GetSkill(skillType);
+        Skills.Skill skill = localPlayer.GetSkills().GetSkill(skillType);
 
         if (skill != null)
         {
@@ -329,7 +342,7 @@ public static class Utils
             return Player.m_localPlayer.IsPVPEnabled() && c.IsPVPEnabled();
         }
 
-        return !c.m_baseAI || c.m_baseAI.IsEnemy(Player.m_localPlayer);
+        return !c.GetBaseAI() || c.GetBaseAI().IsEnemy(Player.m_localPlayer);
     }
 
     public static void InstantiateItem(GameObject prefab, int count, int level, Inventory overrideInventory = null)
@@ -337,7 +350,7 @@ public static class Utils
         Player p = Player.m_localPlayer;
         if (!p || !prefab || count <= 0 || ZNetScene.instance == null) return;
 
-        Inventory inventory = overrideInventory ?? p.m_inventory;
+        Inventory inventory = overrideInventory ?? p.GetInventory();
 
         if (prefab.GetComponent<ItemDrop>() is not { } item) return;
         

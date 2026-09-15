@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Reflection;
+using System.Runtime.Serialization;
 using BepInEx.Configuration;
 using kg.ValheimEnchantmentSystem;
 using kg.ValheimEnchantmentSystem.Configs;
@@ -32,6 +34,8 @@ internal static class Program
         TestNotificationFilters();
         TestNotificationMinimumLevelMetadata();
         TestResourceMapTierSelection();
+        TestResourceMapEquipmentBoundary();
+        TestFoundryRequirements();
         TestSkillScrollPrefabNames();
         TestSkillScrollExpSliders();
         TestScrollCombineModes();
@@ -805,7 +809,7 @@ internal static class Program
             "default resource map parses: " + parseError);
         ResourceMapTier deepNorth = document.ResourceMap![document.ResourceMap.Count - 1];
         Equal("DeepNorth", deepNorth.Biome, "default resource map ends with DeepNorth");
-        Equal(0, deepNorth.Materials.Count, "DeepNorth resource map tier is intentionally empty");
+        True(deepNorth.Materials.Contains("Gold"), "DeepNorth maps the actual Bloodgold prefab name");
 
         List<string> warnings = new();
         Dictionary<string, ResourceTierAssignment> tiers = ResourceMapRequirementResolver.BuildResourceTierMap(
@@ -820,6 +824,23 @@ internal static class Program
             "Plains material maps to C");
         Equal(0, tiers[ResourceMapRequirementResolver.NormalizeResourceToken("Resin")].Rank,
             "duplicate material keeps its first resource map tier");
+
+        // Direct ingredients from registered 1.0.7 recipes; unknown materials still do not block assignment.
+        void RecipeTier(char expected, string output, params string[] materials)
+        {
+            True(ResourceMapRequirementResolver.TrySelectMappedRecipeTier(
+                materials.Select(name => tiers.TryGetValue(ResourceMapRequirementResolver.NormalizeResourceToken(name), out var tier)
+                    ? (ResourceTierAssignment?)tier : null), out ResourceTierAssignment selected), output + " resolves");
+            Equal(expected, selected.ScrollTier, output + " uses the highest mapped direct material");
+        }
+
+        RecipeTier('E', "ShieldRoots", "FineWood", "WrithanRoots", "Upgrader2Armor");
+        RecipeTier('C', "HelmetLox", "LoxPelt", "BoneFragments", "WrithanRoots", "Upgrader4Armor");
+        RecipeTier('B', "GrapplingHook", "Hook", "Eitr", "YggdrasilWood", "Mandible");
+        RecipeTier('S', "SwordGold", "Gold", "MoldSword", "Frostwood", "Upgrader7Weapon");
+        RecipeTier('S', "CapeDeepNorthMage", "SealHide", "NornThread", "Gold", "Eitr", "Upgrader7Armor");
+        Equal('B', tiers[ResourceMapRequirementResolver.NormalizeResourceToken("Hook")].ScrollTier,
+            "Hook follows its Mistlands acquisition path");
 
         const string customBiomeYaml = """
 resourceMap:
@@ -879,6 +900,79 @@ resourceMap:
                 out _,
                 out _),
             "missing resourceMap root is rejected");
+    }
+
+    private static void TestResourceMapEquipmentBoundary()
+    {
+        // Avoid ItemData's Game.m_worldLevel constructor and Attack's Unity-valued initializers.
+        var item = (ItemDrop.ItemData)FormatterServices.GetUninitializedObject(typeof(ItemDrop.ItemData));
+        item.m_shared = (ItemDrop.ItemData.SharedData)FormatterServices.GetUninitializedObject(typeof(ItemDrop.ItemData.SharedData));
+        item.m_shared.m_attack = (Attack)FormatterServices.GetUninitializedObject(typeof(Attack));
+        item.m_shared.m_attack.m_attackAnimation = "swing_longsword";
+        item.m_shared.m_damages.m_slash = 100f;
+        item.m_shared.m_skillType = Skills.SkillType.Swords;
+        MethodInfo classify = typeof(ResourceMapRequirementResolver).GetMethod("TryClassifyEquipment", BindingFlags.Static | BindingFlags.NonPublic)!;
+        bool Classify(out bool armor)
+        {
+            object[] args = { item, false };
+            bool classified = (bool)classify.Invoke(null, args)!;
+            armor = (bool)args[1];
+            return classified;
+        }
+
+        item.m_shared.m_itemType = ItemDrop.ItemData.ItemType.Material;
+        False(Classify(out bool armor), "uncast material with real weapon attack fields receives no automatic requirement");
+        False(armor, "excluded material does not leave an armor classification");
+        item.m_shared.m_skillType = Skills.SkillType.Pickaxes;
+        False(Classify(out _), "material cannot bypass exclusion through the pickaxe shortcut");
+        item.m_shared.m_attachOverride = ItemDrop.ItemData.ItemType.Helmet;
+        False(Classify(out _), "material cannot bypass exclusion through its attachment type");
+        item.m_shared.m_attachOverride = ItemDrop.ItemData.ItemType.None;
+        item.m_shared.m_skillType = Skills.SkillType.Swords;
+        item.m_shared.m_itemType = ItemDrop.ItemData.ItemType.OneHandedWeapon;
+        True(Classify(out armor), "finished weapon with the same attack fields remains eligible");
+        False(armor, "finished sword uses weapon scrolls");
+        item.m_shared.m_itemType = ItemDrop.ItemData.ItemType.Helmet;
+        True(Classify(out armor), "finished armor remains eligible");
+        True(armor, "finished helmet uses armor scrolls");
+    }
+
+    private static void TestFoundryRequirements()
+    {
+        // Parse the actual serialized defaults without initializing EnchantmentTierCatalog's game-dependent fields.
+        MethodInfo parse = typeof(EnchantmentRequirementRepository).GetMethod("TryDeserializeReqMap", BindingFlags.Static | BindingFlags.NonPublic)!;
+        object[] parseArgs = { Defaults.YAML_Reqs, null!, null! };
+        True((bool)parse.Invoke(null, parseArgs)!, "default requirement YAML parses: " + parseArgs[2]);
+        var defaults = (Dictionary<string, List<string>>)parseArgs[1];
+        foreach (string name in new[] { "ArmorDeepNorthHeavyChest", "ArmorDeepNorthHeavylegs", "HelmetDNHeavy" })
+        {
+            True(defaults["(S)Armor"].Contains(name), name + " has an explicit S armor requirement without a crafting recipe");
+            Equal(1, defaults.Values.Sum(items => items.Count(item => item == name)), name + " is assigned exactly once");
+        }
+
+        var manual = new SyncedData.EnchantmentReqs
+        {
+            enchant_prefab = new SyncedData.SingleReq("kg_EnchantScroll_Weapon_B"),
+            blessed_enchant_prefab = new SyncedData.SingleReq("kg_EnchantScroll_Weapon_Blessed_B"),
+            Items = new List<string> { "SwordGoldUncooked", "SwordGold" }
+        };
+        var automatic = new SyncedData.EnchantmentReqs
+        {
+            enchant_prefab = new SyncedData.SingleReq("kg_EnchantScroll_Weapon_S"),
+            blessed_enchant_prefab = new SyncedData.SingleReq("kg_EnchantScroll_Weapon_Blessed_S"),
+            Items = new List<string> { "SwordGold" }
+        };
+        var merged = new List<SyncedData.EnchantmentReqs>();
+        var byOwner = new Dictionary<string, SyncedData.EnchantmentReqs>(StringComparer.Ordinal);
+        var itemOwners = new Dictionary<string, string>(StringComparer.Ordinal);
+        var warnings = new List<string>();
+        MethodInfo merge = typeof(EnchantmentRequirementRepository).GetMethod("MergeRequirements", BindingFlags.Static | BindingFlags.NonPublic)!;
+        merge.Invoke(null, new object[] { new[] { manual }, "manual", merged, byOwner, itemOwners, warnings, true });
+        merge.Invoke(null, new object[] { new[] { automatic }, "automatic", merged, byOwner, itemOwners, warnings, false });
+        Equal("kg_EnchantScroll_Weapon_B", EnchantmentRequirementRepository.GetReqs(merged, "SwordGoldUncooked").enchant_prefab.prefab,
+            "explicit material exception still resolves without automatic classification");
+        Equal("kg_EnchantScroll_Weapon_B", EnchantmentRequirementRepository.GetReqs(merged, "SwordGold").enchant_prefab.prefab,
+            "explicit requirement retains priority over automatic assignment");
     }
 
     private static void TestSkillScrollPrefabNames()

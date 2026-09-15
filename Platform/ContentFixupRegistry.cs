@@ -149,7 +149,7 @@ internal static class ContentFixupRegistry
         return effectList == null || effectList.m_effectPrefabs == null || effectList.m_effectPrefabs.Length == 0;
     }
 
-    [HarmonyPatch(typeof(ZNetScene), nameof(ZNetScene.Awake))]
+    [HarmonyPatch(typeof(ZNetScene), "Awake")]
     private static class ZNetScene_Awake_ContentFixup_Patch
     {
         [UsedImplicitly]

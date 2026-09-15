@@ -112,9 +112,9 @@ internal static class ThinItemManager
             }
 
             int prefabHash = item.Prefab.name.GetStableHashCode();
-            if (!scene.m_namedPrefabs.ContainsKey(prefabHash))
+            if (!scene.VES_m_namedPrefabs().ContainsKey(prefabHash))
             {
-                scene.m_namedPrefabs.Add(prefabHash, item.Prefab);
+                scene.VES_m_namedPrefabs().Add(prefabHash, item.Prefab);
             }
         }
     }
@@ -174,11 +174,11 @@ internal static class ThinItemManager
             changed = true;
         }
 
-        objectDb.m_itemByHash ??= new Dictionary<int, GameObject>();
+        objectDb.VES_m_itemByHash() ??= new Dictionary<int, GameObject>();
         int prefabHash = item.Prefab.name.GetStableHashCode();
-        if (!objectDb.m_itemByHash.ContainsKey(prefabHash))
+        if (!objectDb.VES_m_itemByHash().ContainsKey(prefabHash))
         {
-            objectDb.m_itemByHash.Add(prefabHash, item.Prefab);
+            objectDb.VES_m_itemByHash().Add(prefabHash, item.Prefab);
             changed = true;
         }
 
@@ -494,7 +494,7 @@ internal static class ThinItemManager
         }
     }
 
-    [HarmonyPatch(typeof(ZNetScene), nameof(ZNetScene.Awake))]
+    [HarmonyPatch(typeof(ZNetScene), "Awake")]
     private static class ZNetScene_Awake_Patch
     {
         [UsedImplicitly]
@@ -504,7 +504,7 @@ internal static class ThinItemManager
         }
     }
 
-    [HarmonyPatch(typeof(ObjectDB), nameof(ObjectDB.Awake))]
+    [HarmonyPatch(typeof(ObjectDB), "Awake")]
     private static class ObjectDB_Awake_Patch
     {
         [UsedImplicitly]

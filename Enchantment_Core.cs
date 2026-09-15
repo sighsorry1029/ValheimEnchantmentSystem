@@ -39,7 +39,7 @@ public static class Enchantment_Core
         yield return new WaitForEndOfFrame();
         yield return new WaitForEndOfFrame();
         yield return new WaitForEndOfFrame();
-        if (Player.m_localPlayer && Player.m_localPlayer.m_inventory.ContainsItem(weapon))
+        if (Player.m_localPlayer && Player.m_localPlayer.GetInventory().ContainsItem(weapon))
             Player.m_localPlayer?.EquipItem(weapon);
     }
 
@@ -77,7 +77,7 @@ public static class Enchantment_Core
         public static implicit operator bool(Enchanted en) => en != null;
     }
 
-    [HarmonyPatch(typeof(InventoryGrid), nameof(InventoryGrid.CreateItemTooltip))]
+    [HarmonyPatch(typeof(InventoryGrid), "CreateItemTooltip")]
     [ClientOnlyPatch]
     private static class InventoryGrid_CreateItemTooltip_Patch
     {
@@ -120,16 +120,17 @@ public static class Enchantment_Core
         }
     }
 
-    [HarmonyPatch(typeof(ItemDrop.ItemData), nameof(ItemDrop.ItemData.GetTooltip), typeof(ItemDrop.ItemData), typeof(int), typeof(bool), typeof(float), typeof(int))]
+    [HarmonyPatch(typeof(ItemDrop.ItemData), nameof(ItemDrop.ItemData.GetTooltip), typeof(ItemDrop.ItemData), typeof(int), typeof(bool), typeof(float), typeof(int), typeof(bool))]
     [ClientOnlyPatch]
     public class TooltipPatch
     {
         [UsedImplicitly]
         public static void Postfix(ItemDrop.ItemData item, bool crafting, int qualityLevel, ref string __result)
         {
+            if (item?.m_shared == null) return;
             Enchanted en = item.Data().Get<Enchanted>();
             int currentLevel = en ? en.level : 0;
-            string dropName = item.m_dropPrefab ? item.m_dropPrefab.name : Utils.GetPrefabNameByItemName(item.m_shared.m_name);
+            string dropName = EnchantmentDomainHelper.ResolveItemPrefabName(item);
             var reqs = SyncedData.GetReqs(dropName);
             string statusLine = BuildTooltipStatusLine(reqs, dropName, currentLevel, item);
 
@@ -240,21 +241,38 @@ public static class Enchantment_Core
         return ZNetScene.instance?.GetPrefab(requirement.prefab)?.GetComponent<ItemDrop>()?.m_itemData?.m_shared?.m_name ?? string.Empty;
     }
  
-    [HarmonyPatch(typeof(InventoryGui), nameof(InventoryGui.UpdateRecipe))]
+    [HarmonyPatch(typeof(InventoryGui), "UpdateRecipe")]
     [ClientOnlyPatch]
     private static class InventoryGui_UpdateRecipe_Patch
     {
+        private static readonly Func<InventoryGui, ItemDrop.ItemData> SelectedItem = CreateSelectedItemGetter();
+
+        private static Func<InventoryGui, ItemDrop.ItemData> CreateSelectedItemGetter()
+        {
+            FieldInfo recipe = AccessTools.Field(typeof(InventoryGui), "m_selectedRecipe");
+            MethodInfo itemGetter = AccessTools.Property(recipe.FieldType, "ItemData").GetGetMethod(true);
+            // UpdateRecipe runs every frame while the inventory is open. Read the private
+            // value type by address, without boxing it or invoking reflection on each frame.
+            DynamicMethod getter = new("VES_SelectedRecipeItem", typeof(ItemDrop.ItemData),
+                new[] { typeof(InventoryGui) }, typeof(InventoryGui), true);
+            ILGenerator il = getter.GetILGenerator();
+            il.Emit(OpCodes.Ldarg_0);
+            il.Emit(OpCodes.Ldflda, recipe);
+            il.Emit(OpCodes.Call, itemGetter);
+            il.Emit(OpCodes.Ret);
+            return (Func<InventoryGui, ItemDrop.ItemData>)getter.CreateDelegate(typeof(Func<InventoryGui, ItemDrop.ItemData>));
+        }
         [UsedImplicitly]
         private static void Postfix(InventoryGui __instance)
         {
-            Enchanted en = __instance.m_selectedRecipe.ItemData?.Data().Get<Enchanted>();
+            Enchanted en = SelectedItem(__instance)?.Data().Get<Enchanted>();
             if (!en) return;
             string color = SyncedData.GetColor(en, out _, true).IncreaseColorLight();
             __instance.m_recipeName.text += $" (<color={color}>+{en!.level}</color>)";
         }
     }
 
-    [HarmonyPatch(typeof(InventoryGui), nameof(InventoryGui.AddRecipeToList))]
+    [HarmonyPatch(typeof(InventoryGui), "AddRecipeToList")]
     [ClientOnlyPatch]
     private static class InventoryGui_AddRecipeToList_Patch
     {
@@ -369,7 +387,7 @@ public static class Enchantment_Core
         damage.m_pickaxe += stats.damage_pickaxe;
     }
     
-    [HarmonyPatch(typeof(Player),nameof(Player.ApplyArmorDamageMods))]
+    [HarmonyPatch(typeof(Player),"ApplyArmorDamageMods")]
     [ClientOnlyPatch]
     private static class Player_ApplyArmorDamageMods_Patch
     {
@@ -448,7 +466,7 @@ public static class Enchantment_Core
         return speed;
     }
 
-    [HarmonyPatch(typeof(Player), nameof(Player.FixedUpdate))]
+    [HarmonyPatch(typeof(Player), "FixedUpdate")]
     [ClientOnlyPatch]
     public static class Player_FixedUpdate_Patch
     {
@@ -463,14 +481,14 @@ public static class Enchantment_Core
         }
     }
 
-    [HarmonyPatch(typeof(Player), nameof(Player.UpdateStats), typeof(float))]
+    [HarmonyPatch(typeof(Player), "UpdateStats", typeof(float))]
     [ClientOnlyPatch]
     public static class Player_UpdateStats_Patch
     {
-        private static readonly FieldInfo CharacterNViewField = AccessTools.Field(typeof(Character), nameof(Character.m_nview));
+        private static readonly FieldInfo CharacterNViewField = AccessTools.Field(typeof(Character), "m_nview");
         private static readonly MethodInfo ZNetViewGetZdoMethod = AccessTools.Method(typeof(ZNetView), nameof(ZNetView.GetZDO));
         private static readonly FieldInfo ZdoVarsStaminaField = AccessTools.Field(typeof(ZDOVars), nameof(ZDOVars.s_stamina));
-        private static readonly FieldInfo PlayerStaminaField = AccessTools.Field(typeof(Player), nameof(Player.m_stamina));
+        private static readonly FieldInfo PlayerStaminaField = AccessTools.Field(typeof(Player), "m_stamina");
         private static readonly MethodInfo ZdoSetFloatMethod = AccessTools.Method(typeof(ZDO), nameof(ZDO.Set), new[] { typeof(int), typeof(float) });
         private static readonly MethodInfo ApplyEnchantmentStaminaRegenMethod = AccessTools.DeclaredMethod(typeof(PlayerExtensions), nameof(PlayerExtensions.UpdateEnchantmentStaminaRegen));
 
@@ -540,7 +558,7 @@ public static class PlayerExtensions
         {
             num *= 0.8f;
         }
-        if ((player.IsSwimming() && !player.IsOnGround()) || player.InAttack() || player.InDodge() || player.m_wallRunning || flag)
+        if ((player.IsSwimming() && !player.IsOnGround()) || player.InAttack() || player.InDodge() || player.IsWallRunning() || flag)
         {
             num = 0f;
         }
@@ -550,10 +568,10 @@ public static class PlayerExtensions
         if (additionalRegen > 0f)
         {
             float staminaMultiplier = 1f;
-            player.m_seman.ModifyStaminaRegen(ref staminaMultiplier);
+            player.GetSEMan().ModifyStaminaRegen(ref staminaMultiplier);
             float regenAmount = additionalRegen * staminaMultiplier * num * dt;
 
-            player.m_stamina = Mathf.Min(maxStamina, player.m_stamina + regenAmount * Game.m_staminaRegenRate);
+            player.VES_m_stamina() = Mathf.Min(maxStamina, player.VES_m_stamina() + regenAmount * Game.m_staminaRegenRate);
         }
     }
 }

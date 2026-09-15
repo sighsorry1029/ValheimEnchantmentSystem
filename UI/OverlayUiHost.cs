@@ -132,7 +132,7 @@ internal static class OverlayUiHost
         }
     }
 
-    [HarmonyPatch(typeof(InventoryGui), nameof(InventoryGui.Awake))]
+    [HarmonyPatch(typeof(InventoryGui), "Awake")]
     [ClientOnlyPatch]
     private static class InventoryGui_Awake_Patch
     {

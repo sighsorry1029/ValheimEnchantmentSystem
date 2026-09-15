@@ -81,7 +81,7 @@ internal static class ZenUiCompatibility
         }
     }
 
-    [HarmonyPatch(typeof(InventoryGui), nameof(InventoryGui.UpdateRecipeList))]
+    [HarmonyPatch(typeof(InventoryGui), "UpdateRecipeList")]
     [ClientOnlyPatch]
     private static class InventoryGui_UpdateRecipeList_Patch
     {

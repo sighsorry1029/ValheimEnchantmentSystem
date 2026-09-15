@@ -146,10 +146,10 @@ public class BuildPiece
 
     static BuildPiece()
     {
-        Harmony.Patch(AccessTools.DeclaredMethod(typeof(FejdStartup), nameof(FejdStartup.Awake)), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(BuildPiece), nameof(Patch_FejdStartup))));
-        Harmony.Patch(AccessTools.DeclaredMethod(typeof(ObjectDB), nameof(ObjectDB.Awake)), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(BuildPiece), nameof(Patch_ObjectDBInit))));
+        Harmony.Patch(AccessTools.DeclaredMethod(typeof(FejdStartup), "Awake"), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(BuildPiece), nameof(Patch_FejdStartup))));
+        Harmony.Patch(AccessTools.DeclaredMethod(typeof(ObjectDB), "Awake"), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(BuildPiece), nameof(Patch_ObjectDBInit))));
         Harmony.Patch(AccessTools.DeclaredMethod(typeof(ObjectDB), nameof(ObjectDB.CopyOtherDB)), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(BuildPiece), nameof(Patch_ObjectDBInit))));
-        Harmony.Patch(AccessTools.DeclaredMethod(typeof(ZNetScene), nameof(ZNetScene.Awake)), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(BuildPiece), nameof(Patch_ZNetSceneAwake))));
+        Harmony.Patch(AccessTools.DeclaredMethod(typeof(ZNetScene), "Awake"), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(BuildPiece), nameof(Patch_ZNetSceneAwake))));
     }
 
     public BuildPiece(AssetBundle bundle, string prefabName)
@@ -186,9 +186,9 @@ public class BuildPiece
             }
 
             int prefabHash = piece.Prefab.name.GetStableHashCode();
-            if (!__instance.m_namedPrefabs.ContainsKey(prefabHash))
+            if (!__instance.VES_m_namedPrefabs().ContainsKey(prefabHash))
             {
-                __instance.m_namedPrefabs.Add(prefabHash, piece.Prefab);
+                __instance.VES_m_namedPrefabs().Add(prefabHash, piece.Prefab);
             }
         }
     }

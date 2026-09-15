@@ -80,7 +80,7 @@ public static class ScrollDropService
     {
         if (character == null || character.IsPlayer() || character.IsTamed())
             return false;
-        if (character.m_nview == null || !character.m_nview.IsValid() || !character.m_nview.IsOwner())
+        if (character.VES_m_nview() == null || !character.VES_m_nview().IsValid() || !character.VES_m_nview().IsOwner())
             return false;
 
         return ZNetScene.instance != null;
@@ -88,7 +88,7 @@ public static class ScrollDropService
 
     private static bool HasPlayerLastHit(Character character)
     {
-        return character?.m_lastHit?.GetAttacker() is Player;
+        return character?.VES_m_lastHit()?.GetAttacker() is Player;
     }
 
     private static void DropItem(GameObject prefab, Vector3 centerPos, float dropArea)

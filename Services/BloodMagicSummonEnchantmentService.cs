@@ -44,12 +44,12 @@ internal static class BloodMagicSummonEnchantmentService
     private static bool TryGetSummonDamageStats(Character attacker, out SyncedData.Stat_Data stats)
     {
         stats = null;
-        if (!attacker || !attacker.m_nview || !attacker.m_nview.IsValid())
+        if (!attacker || !attacker.VES_m_nview() || !attacker.VES_m_nview().IsValid())
         {
             return false;
         }
 
-        ZDO zdo = attacker.m_nview.GetZDO();
+        ZDO zdo = attacker.VES_m_nview().GetZDO();
         if (zdo == null)
         {
             return false;
@@ -66,23 +66,23 @@ internal static class BloodMagicSummonEnchantmentService
         return Enchantment_Core.HasDamageStats(stats);
     }
 
-    [HarmonyPatch(typeof(SpawnAbility), nameof(SpawnAbility.SetupAoe))]
+    [HarmonyPatch(typeof(SpawnAbility), "SetupAoe")]
     private static class SpawnAbility_SetupAoe_Patch
     {
         [UsedImplicitly]
         private static void Prefix(SpawnAbility __instance, Character owner)
         {
-            if (!owner || !owner.m_nview || !owner.m_nview.IsValid())
+            if (!owner || !owner.VES_m_nview() || !owner.VES_m_nview().IsValid())
             {
                 return;
             }
 
-            if (!TryGetSourceEnchantment(__instance.m_weapon, out string sourcePrefab, out int sourceLevel))
+            if (!TryGetSourceEnchantment(__instance.VES_m_weapon(), out string sourcePrefab, out int sourceLevel))
             {
                 return;
             }
 
-            ZDO zdo = owner.m_nview.GetZDO();
+            ZDO zdo = owner.VES_m_nview().GetZDO();
             if (zdo == null)
             {
                 return;
@@ -93,7 +93,7 @@ internal static class BloodMagicSummonEnchantmentService
         }
     }
 
-    [HarmonyPatch(typeof(Character), nameof(Character.RPC_Damage))]
+    [HarmonyPatch(typeof(Character), "RPC_Damage")]
     private static class Character_RPC_Damage_Patch
     {
         [UsedImplicitly]

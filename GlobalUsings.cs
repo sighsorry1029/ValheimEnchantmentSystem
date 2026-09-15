@@ -12,3 +12,4 @@ global using fastJSON;
 global using HarmonyLib;
 global using UnityEngine;
 global using UnityEngine.UI;
+global using kg.ValheimEnchantmentSystem.Platform;

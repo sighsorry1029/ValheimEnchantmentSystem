@@ -48,7 +48,7 @@ public static class SharedLocalizationCache
             }
         }
 
-        if (Localization.m_instance != null)
+        if (GameAccess.ExistingLocalization != null)
         {
             Localization active = Localization.instance;
             string activeLanguage = active.GetSelectedLanguage();
@@ -242,7 +242,7 @@ public class Localizer
                     LoadedTexts[language] = texts;
                 }
 
-                if (!localization.m_translations.ContainsKey(key))
+                if (!localization.VES_m_translations().ContainsKey(key))
                 {
                     texts[key] = text;
                     localization.AddWord(key, text);
@@ -351,8 +351,8 @@ public class Localizer
     {
         Harmony harmony = new("org.bepinex.helpers.LocalizationManager");
         harmony.Patch(AccessTools.DeclaredMethod(typeof(Localization), nameof(Localization.SetupLanguage)), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Localizer), nameof(LoadLocalization))));
-        harmony.Patch(AccessTools.DeclaredMethod(typeof(FejdStartup), nameof(FejdStartup.SetupGui)), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Localizer), nameof(LoadLocalizationLater))));
-        harmony.Patch(AccessTools.DeclaredMethod(typeof(FejdStartup), nameof(FejdStartup.Start)), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Localizer), nameof(SafeCallLocalizeComplete))));
+        harmony.Patch(AccessTools.DeclaredMethod(typeof(FejdStartup), "SetupGui"), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Localizer), nameof(LoadLocalizationLater))));
+        harmony.Patch(AccessTools.DeclaredMethod(typeof(FejdStartup), "Start"), postfix: new HarmonyMethod(AccessTools.DeclaredMethod(typeof(Localizer), nameof(SafeCallLocalizeComplete))));
     }
 
     private static byte[]? LoadTranslationFromAssembly(string language)

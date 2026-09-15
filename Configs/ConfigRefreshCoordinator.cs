@@ -135,7 +135,7 @@ internal static class ConfigRefreshCoordinator
             Utils.print($"Failed to refresh local player stats: {ex.Message}", ConsoleColor.Yellow);
         }
 
-        foreach (ItemDrop.ItemData item in Player.m_localPlayer.m_inventory.GetAllItems())
+        foreach (ItemDrop.ItemData item in Player.m_localPlayer.GetInventory().GetAllItems())
         {
             float maxDurability = item.GetMaxDurability();
             if (maxDurability <= 0f)
@@ -149,6 +149,6 @@ internal static class ConfigRefreshCoordinator
             }
         }
 
-        Player.m_localPlayer.m_inventory.Changed();
+        Player.m_localPlayer.GetInventory().Changed();
     }
 }

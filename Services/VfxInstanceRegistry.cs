@@ -174,7 +174,7 @@ internal static class VfxInstanceRegistry
         }
     }
 
-    [HarmonyPatch(typeof(ItemDrop), nameof(ItemDrop.Start))]
+    [HarmonyPatch(typeof(ItemDrop), "Start")]
     [ClientOnlyPatch]
     private static class ItemDrop_Start_Patch
     {
@@ -185,7 +185,7 @@ internal static class VfxInstanceRegistry
         }
     }
 
-    [HarmonyPatch(typeof(ArmorStand), nameof(ArmorStand.Awake))]
+    [HarmonyPatch(typeof(ArmorStand), "Awake")]
     [ClientOnlyPatch]
     private static class ArmorStand_Awake_Patch
     {
