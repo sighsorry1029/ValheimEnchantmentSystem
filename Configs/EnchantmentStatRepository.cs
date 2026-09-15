@@ -94,32 +94,26 @@ internal static class EnchantmentStatRepository
 
     public static SyncedData.Stat_Data GetStatIncrease(string dropPrefab, int level, bool isWeapon)
     {
-        if (level <= 0 || string.IsNullOrWhiteSpace(dropPrefab))
-        {
-            return null;
-        }
-
-        if (OptimizedOverrides.TryGetValue(dropPrefab, out Dictionary<int, SyncedData.Stat_Data> overridden) &&
-            overridden.TryGetValue(level, out SyncedData.Stat_Data overrideStat))
-        {
-            return overrideStat;
-        }
-
-        Dictionary<int, SyncedData.Stat_Data> target = isWeapon
-            ? SyncedData.Synced_EnchantmentStats_Weapons.Value
-            : SyncedData.Synced_EnchantmentStats_Armor.Value;
-        return target.TryGetValue(level, out SyncedData.Stat_Data increase) ? increase : null;
+        TryGetDefinedStatIncrease(dropPrefab, level, isWeapon, out SyncedData.Stat_Data increase);
+        return increase;
     }
 
     public static bool HasStatIncrease(string dropPrefab, int level, bool isWeapon)
     {
+        // A defined null value still counts as a configured level.
+        return TryGetDefinedStatIncrease(dropPrefab, level, isWeapon, out _);
+    }
+
+    private static bool TryGetDefinedStatIncrease(string dropPrefab, int level, bool isWeapon, out SyncedData.Stat_Data increase)
+    {
+        increase = null;
         if (level <= 0 || string.IsNullOrWhiteSpace(dropPrefab))
         {
             return false;
         }
 
         if (OptimizedOverrides.TryGetValue(dropPrefab, out Dictionary<int, SyncedData.Stat_Data> overridden) &&
-            overridden.ContainsKey(level))
+            overridden.TryGetValue(level, out increase))
         {
             return true;
         }
@@ -127,7 +121,7 @@ internal static class EnchantmentStatRepository
         Dictionary<int, SyncedData.Stat_Data> target = isWeapon
             ? SyncedData.Synced_EnchantmentStats_Weapons.Value
             : SyncedData.Synced_EnchantmentStats_Armor.Value;
-        return target.ContainsKey(level);
+        return target.TryGetValue(level, out increase);
     }
 
     private static void EnsureSubscriptions()
