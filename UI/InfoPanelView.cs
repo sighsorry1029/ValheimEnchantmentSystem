@@ -35,10 +35,17 @@ internal sealed class InfoPanelView : MonoBehaviour
 
     public void ForceCanvasLayout()
     {
-        List<ContentSizeFitter> allFitters = gameObject.GetComponentsInChildren<ContentSizeFitter>(true).ToList();
+        ContentSizeFitter[] allFitters = gameObject.GetComponentsInChildren<ContentSizeFitter>(true);
         Canvas.ForceUpdateCanvases();
-        allFitters.ForEach(fitter => fitter.enabled = false);
-        allFitters.ForEach(fitter => fitter.enabled = true);
+        foreach (ContentSizeFitter fitter in allFitters)
+        {
+            fitter.enabled = false;
+        }
+
+        foreach (ContentSizeFitter fitter in allFitters)
+        {
+            fitter.enabled = true;
+        }
     }
 
     public void LocalizeRoot()
