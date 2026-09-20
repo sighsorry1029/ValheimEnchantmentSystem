@@ -12,6 +12,6 @@
     <Reference Include="0Harmony"><HintPath>..\..\Libs\0Harmony.dll</HintPath></Reference>
     <Reference Include="MonoMod.Utils"><HintPath>$(ValheimDir)\BepInEx\core\MonoMod.Utils.dll</HintPath></Reference>
     <None Include="$(ValheimManagedDir)\*.dll" Exclude="$(ValheimManagedDir)\mscorlib.dll;$(ValheimManagedDir)\netstandard.dll;$(ValheimManagedDir)\System*.dll" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="..\..\Libs\BepInEx.dll" Link="BepInEx.dll" CopyToOutputDirectory="PreserveNewest" />
+    <Reference Include="BepInEx"><HintPath>..\..\Libs\BepInEx.dll</HintPath></Reference>
   </ItemGroup>
 </Project>

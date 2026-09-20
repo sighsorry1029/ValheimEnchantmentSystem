@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.9.18
+
+- Fixed the BepInEx startup dependency cycle when VES, Epic Loot and AzuCraftyBoxes are installed together by removing VES's unnecessary load-after requirement for AzuCraftyBoxes
+- Preserved optional AzuCraftyBoxes chest integration through its existing on-demand binding, including access checks, item filters, range and Leave One Item behavior
+- Added read-only refinement integration queries for an item's configured blessed scroll and enchantment information, allowing optional YourIdol integration without adding a required dependency
+- Added a regression check using the built DLL's dependency declarations and BepInEx's loader sorter, including reproduction of the old cyclic graph; actual game initialization and multiplayer remain separate validation steps
+
 ## 1.9.17
 
 - Fixed repeating crafting-tooltip NullReferenceExceptions when ObjectDB contains entries without ItemDrop, including the reported Hammer recipe path

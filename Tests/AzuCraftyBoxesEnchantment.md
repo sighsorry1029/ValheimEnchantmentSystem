@@ -15,3 +15,11 @@ Test with the supplied AzuCraftyBoxes 1.8.15 and this mod on the client; repeat 
 11. Equip armor with enchantment bonuses to maximum health/stamina, movement, regeneration, or resistance and let those stats be queried before enchanting. Put the only required scrolls in an eligible chest, then enchant successfully and test a level-decrease failure. Without moving any player-inventory items or re-equipping the armor, verify the next stat query uses the new enchantment level. Repeat with inventory scrolls, instant animation, `setenchantall`, and the single-item `setenchant` command. The chest-only path must invalidate the player's equipment snapshot independently of inventory change events.
 
 Automated rule tests cover exact prefab matching, zero/negative stock, normal/blessed separation, reserve accounting, saturated counts, inventory-first lazy container access, one successful consumption, stock disappearing, and stopping on an uncertain mutation instead of trying another source.
+
+## Optional plugin load order (1.9.18)
+
+VES no longer declares a BepInEx load-after dependency on AzuCraftyBoxes. Epic Loot 0.14.10 declares VES as a soft dependency, and AzuCraftyBoxes 1.8.22 declares Epic Loot as a soft dependency; the old VES declaration closed that cycle before any plugin initialized. The adapter still binds on demand through `GetEligibleContainers -> EnsureBindings`, and a not-yet-loaded plugin does not cache a binding failure.
+
+The compatibility runner reads the built VES DLL's actual dependency attributes and calls BepInEx's topological sorter with those two external declarations. It checks the three-plugin order, optional mods absent, and a negative control restoring the old edge to reproduce the fatal cycle. This is a loader-graph test, not Unity initialization.
+
+In-game checks still required: load VES before Epic Loot and ACB together; then repeat the inventory/chest cases above and verify ACB's inventory provider is available at Epic Loot's enchanting table. Repeat with ACB absent/disabled, denied access, leave-one, and reconnect. Do not assume graph sorting alone verifies callbacks, consumption or multiplayer.

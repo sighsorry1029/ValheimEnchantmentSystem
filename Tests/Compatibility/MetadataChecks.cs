@@ -17,6 +17,7 @@ internal static class MetadataChecks
         using var mod = ModuleDefinition.ReadModule(Path.Combine(AppContext.BaseDirectory, "kg.ValheimEnchantmentSystem.dll"), parameters);
         int failures = 0, references = 0, bindings = 0;
         void Fail(string message) { ++failures; System.Console.Error.WriteLine(message); }
+        CheckPluginLoadOrder(mod, Fail);
         bool GameType(TypeReference t) => t.Scope.Name.StartsWith("assembly_") || t.Scope.Name.StartsWith("Unity") || t.Scope.Name.StartsWith("SoftReferenceable");
         void CheckReferences(ModuleDefinition module)
         {
@@ -106,5 +107,39 @@ internal static class MetadataChecks
             stats[i+6].Operand is MethodReference set && set.Name == "Set"), "stamina injection before ZDO write");
         System.Console.WriteLine($"Metadata: {references} game/Unity member references (including embedded scripts), {bindings} FieldRef bindings, {ilChecks} IL contracts, {failures} failures.");
         return failures == 0 ? 0 : 1;
+    }
+
+    private static void CheckPluginLoadOrder(ModuleDefinition mod, Action<string> fail)
+    {
+        const string ves = "kg.ValheimEnchantmentSystem", epic = "randyknapp.mods.epicloot", boxes = "Azumatt.AzuCraftyBoxes";
+        var plugin = mod.GetType("kg.ValheimEnchantmentSystem.ValheimEnchantmentSystem");
+        string[] dependencies = plugin.CustomAttributes.Where(a => a.AttributeType.FullName == "BepInEx.BepInDependency")
+            .Select(a => (string)a.ConstructorArguments[0].Value).ToArray();
+        // Real installed declarations: Epic Loot 0.14.10 requires VES first; ACB 1.8.22 requires Epic Loot first.
+        // The VES side comes from the built DLL so restoring the old attribute reproduces the loader failure.
+        var graph = new System.Collections.Generic.Dictionary<string, string[]> {
+            [ves] = dependencies, [epic] = new[] { ves }, [boxes] = new[] { epic }
+        };
+        string[] Sort() => BepInEx.Utility.TopologicalSort(graph.Keys.OrderBy(k => k),
+            id => graph.TryGetValue(id, out var needs) ? needs : Array.Empty<string>()).ToArray();
+        try
+        {
+            string[] sorted = Sort();
+            if (!(Array.IndexOf(sorted, ves) < Array.IndexOf(sorted, epic) && Array.IndexOf(sorted, epic) < Array.IndexOf(sorted, boxes)))
+                fail("Optional plugin load order must allow VES, Epic Loot, then AzuCraftyBoxes.");
+            graph.Remove(boxes);
+            Sort(); // ACB absent remains a valid optional-mod setup.
+            graph.Remove(epic);
+            Sort(); // Neither external mod is required to load VES.
+        }
+        catch (Exception e) { fail("Plugin dependency regression: " + e.Message); }
+
+        graph[epic] = new[] { ves };
+        graph[boxes] = new[] { epic };
+        graph[ves] = dependencies.Concat(new[] { boxes }).ToArray();
+        bool reproduced = false;
+        try { Sort(); }
+        catch (Exception e) { reproduced = e.Message.StartsWith("Cyclic Dependency:", StringComparison.Ordinal); }
+        if (!reproduced) fail("Dependency regression fixture must reproduce the reported cycle when the old VES edge is restored.");
     }
 }
